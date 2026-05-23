@@ -67,24 +67,26 @@ async def health():
 
 
 # Serve frontend static files (CSS, JS, images, manifest)
-if os.path.isdir(STATIC_DIR):
+if os.path.isdir(os.path.join(STATIC_DIR, "css")):
     app.mount("/css", StaticFiles(directory=os.path.join(STATIC_DIR, "css")), name="css")
+if os.path.isdir(os.path.join(STATIC_DIR, "js")):
     app.mount("/js", StaticFiles(directory=os.path.join(STATIC_DIR, "js")), name="js")
 
-    # Serve manifest.json and other root-level static files
+# Serve manifest.json and other root-level static files
+if os.path.isfile(os.path.join(STATIC_DIR, "manifest.json")):
     @app.get("/manifest.json")
     async def manifest():
         return FileResponse(os.path.join(STATIC_DIR, "manifest.json"))
 
-    # SPA catch-all: serve index.html for any non-API, non-static route
-    @app.get("/{path:path}")
-    async def spa_catchall(path: str):
-        # If the path looks like a file with an extension, try to serve it
-        file_path = os.path.join(STATIC_DIR, path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        # Otherwise serve the SPA shell
-        index_path = os.path.join(STATIC_DIR, "index.html")
-        if os.path.isfile(index_path):
-            return FileResponse(index_path)
-        return {"detail": "Not found"}
+# SPA catch-all: serve index.html for any non-API, non-static route
+@app.get("/{path:path}")
+async def spa_catchall(path: str):
+    # If the path looks like a file with an extension, try to serve it
+    file_path = os.path.join(STATIC_DIR, path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    # Otherwise serve the SPA shell
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path)
+    return {"detail": "Not found"}
