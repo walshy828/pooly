@@ -92,7 +92,7 @@ async def main():
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(poll_sensors, "interval", minutes=5, id="poll_sensors")
-    scheduler.add_job(poll_weather, "interval", minutes=30, id="poll_weather")
+    scheduler.add_job(poll_weather, "interval", minutes=60, id="poll_weather")
     scheduler.add_job(check_reminders, "interval", hours=6, id="check_reminders")
 
     scheduler.start()
