@@ -21,12 +21,12 @@ services:
       - pooly-net
 
   api:
-    build: ./backend
+    build:
+      context: https://github.com/walshy828/pooly.git#main
+      dockerfile: backend/Dockerfile
     container_name: pooly-api
     ports:
       - "${APP_PORT:-8080}:8000"
-    volumes:
-      - ./frontend:/app/static:ro
     environment:
       - DB_HOST=${DB_HOST:-db}
       - DB_PORT=${DB_PORT:-5432}
@@ -48,7 +48,9 @@ services:
       - pooly-net
 
   worker:
-    build: ./backend
+    build:
+      context: https://github.com/walshy828/pooly.git#main
+      dockerfile: backend/Dockerfile
     container_name: pooly-worker
     command: python -m app.worker.scheduler
     environment:

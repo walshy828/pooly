@@ -8,11 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY . .
+COPY backend/ .
+
+# Bake frontend static files into the image
+COPY frontend/ ./static/
 
 # Make entrypoint executable
 RUN chmod +x entrypoint.sh
