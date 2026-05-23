@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="description" content="Pooly — Smart Pool Maintenance Manager. Track water chemistry, log treatments, and stay on top of pool maintenance.">
+  <meta name="theme-color" content="#0A1628">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Pooly">
+
+  <title>Pooly — Pool Maintenance Manager</title>
+
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏊</text></svg>">
+
+  <!-- Design System CSS -->
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/dashboard.css">
+  <link rel="stylesheet" href="/css/quick-entry.css">
+  <link rel="stylesheet" href="/css/animations.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Page Content Area -->
+    <main id="pageContent">
+      <div class="loading-center" style="min-height:80vh">
+        <div class="spinner spinner-lg"></div>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav" id="bottomNav"></nav>
+  </div>
+
+  <!-- JavaScript Modules -->
+  <script src="/js/api.js"></script>
+  <script src="/js/utils/chemistry.js"></script>
+  <script src="/js/utils/formatters.js"></script>
+  <script src="/js/components/toast.js"></script>
+  <script src="/js/components/edit-modal.js"></script>
+  <script src="/js/pages/dashboard.js"></script>
+  <script src="/js/pages/quick-entry.js"></script>
+  <script src="/js/pages/history.js"></script>
+  <script src="/js/pages/settings.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

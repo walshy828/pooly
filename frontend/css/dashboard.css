@@ -1,0 +1,357 @@
+/* ── Dashboard Page Styles ──────────────────────────────────────── */
+
+.dashboard { padding-bottom: var(--space-xl); }
+
+/* Pool Closed Banner */
+.pool-closed-banner {
+  display: flex; align-items: center; gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border: 1px solid #90caf9;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-lg);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.banner-icon { font-size: 1.8rem; }
+.banner-title { font-weight: var(--fw-bold); color: #0d47a1; font-size: var(--fs-md); }
+.banner-desc { font-size: var(--fs-xs); color: #1565c0; margin-top: 2px; }
+
+/* Season Card (Settings) */
+.season-card {
+  display: flex; flex-direction: column; gap: var(--space-md);
+  padding: var(--space-lg);
+  transition: all 0.3s ease;
+}
+.season-card.open { border-left: 4px solid var(--color-primary); }
+.season-card.closed { border-left: 4px solid #90caf9; background: #f8fbff; }
+.season-status { display: flex; align-items: center; gap: var(--space-md); }
+.season-icon { 
+  width: 48px; height: 48px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; background: var(--bg-elevated);
+}
+.season-label { font-weight: var(--fw-bold); font-size: var(--fs-md); }
+.season-date { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
+.season-actions { margin-top: var(--space-xs); }
+
+
+/* Chem abbreviation legend (tap to expand) */
+.chem-legend {
+  margin-top: var(--space-sm);
+  font-size: var(--fs-xs); color: var(--text-muted);
+}
+.chem-legend-toggle {
+  cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; font-family: var(--font-family);
+  font-size: var(--fs-xs); color: var(--text-muted); padding: 0;
+}
+.chem-legend-toggle:hover { color: var(--text-secondary); }
+.chem-legend-content {
+  display: none; grid-template-columns: repeat(2, 1fr); gap: 2px 12px;
+  margin-top: var(--space-sm); padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card); border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+.chem-legend-content.open { display: grid; }
+.chem-legend-row { display: flex; gap: var(--space-sm); font-size: 11px; }
+.chem-legend-abbr { font-weight: var(--fw-bold); color: var(--text-primary); min-width: 34px; }
+.chem-legend-name { color: var(--text-secondary); }
+
+
+/* Health hero card */
+.health-hero {
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(32, 178, 170, 0.08) 100%);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-lg);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.health-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at center, var(--color-accent-glow) 0%, transparent 50%);
+  opacity: 0.3;
+  animation: shimmer 6s ease-in-out infinite;
+}
+
+.health-score-display {
+  position: relative;
+  z-index: 1;
+}
+
+.health-score-number {
+  font-size: 3.5rem;
+  font-weight: var(--fw-bold);
+  background: linear-gradient(135deg, var(--color-accent), #00CED1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.health-score-label {
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  margin-top: var(--space-xs);
+}
+
+.health-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  margin-top: var(--space-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.health-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--health-1), var(--health-5), var(--health-8), var(--health-10));
+  transition: width var(--transition-slow);
+}
+
+.health-age {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-sm);
+}
+
+/* Sensor row */
+.sensor-row {
+  margin-bottom: var(--space-lg);
+}
+
+/* Chemistry section */
+.chemistry-section {
+  margin-bottom: var(--space-lg);
+}
+
+.chemistry-age {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-md);
+  padding: 0 var(--space-xs);
+}
+.chemistry-age .age-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Reminders section */
+.reminders-section {
+  margin-bottom: var(--space-lg);
+}
+
+/* Reminders — swipe-to-action cards */
+.reminder-item {
+  position: relative; overflow: hidden;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  transition: border-color var(--transition-fast);
+  user-select: none;
+}
+.reminder-item:hover { border-color: var(--border-medium); }
+
+/* Slide track — holds the content row + hidden action buttons */
+.reminder-track {
+  display: flex;
+  transition: transform 0.25s ease;
+  width: 100%;
+}
+
+/* Main visible content */
+.reminder-main {
+  display: flex; align-items: center; gap: var(--space-md);
+  padding: var(--space-md); flex-shrink: 0; width: 100%;
+  cursor: pointer;
+}
+
+/* Action buttons revealed by swipe / shown on hover */
+.reminder-actions {
+  display: flex; flex-shrink: 0;
+  position: absolute; right: 0; top: 0; bottom: 0;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
+.reminder-item.actions-open .reminder-actions {
+  transform: translateX(0);
+}
+.reminder-item.actions-open .reminder-main {
+  opacity: 0.4;
+}
+
+.reminder-action-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; padding: 0 var(--space-lg);
+  border: none; cursor: pointer; font-family: var(--font-family);
+  font-size: 11px; font-weight: var(--fw-semibold);
+  min-width: 72px; height: 100%;
+  transition: filter 0.15s ease;
+}
+.reminder-action-btn:hover { filter: brightness(1.15); }
+.reminder-action-btn .action-icon { font-size: 1.3rem; line-height: 1; }
+.reminder-action-done { background: var(--color-success); color: #fff; }
+.reminder-action-skip { background: var(--bg-elevated); color: var(--text-secondary); border-left: 1px solid var(--border-subtle); }
+
+/* Completing animation */
+.reminder-item.completing {
+  animation: reminderComplete 0.4s ease forwards;
+}
+@keyframes reminderComplete {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); background: rgba(46,204,113,0.1); }
+  100% { opacity: 0; transform: scale(0.95) translateX(-10px); max-height: 0; margin: 0; padding: 0; }
+}
+.reminder-item.dismissing {
+  animation: reminderDismiss 0.3s ease forwards;
+}
+@keyframes reminderDismiss {
+  to { opacity: 0; transform: translateX(20px); max-height: 0; margin: 0; padding: 0; }
+}
+
+.reminder-icon {
+  font-size: 1.2rem;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.reminder-urgency-urgent .reminder-icon { background: var(--color-danger-bg); }
+.reminder-urgency-overdue .reminder-icon { background: var(--color-warning-bg); }
+.reminder-urgency-due_soon .reminder-icon { background: var(--color-info-bg); }
+.reminder-urgency-good .reminder-icon { background: var(--color-success-bg); }
+
+.reminder-info { flex: 1; min-width: 0; }
+.reminder-name { font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
+.reminder-detail { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
+
+.reminder-badge { flex-shrink: 0; }
+
+/* Weather section */
+.weather-section {
+  margin-bottom: var(--space-lg);
+}
+
+.weather-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.weather-current {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+
+.weather-temp {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+}
+
+.weather-details {
+  display: flex;
+  gap: var(--space-lg);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.weather-impact {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.weather-impact-item {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  padding: var(--space-xs) 0;
+  line-height: 1.5;
+}
+
+/* Recommendations */
+.recommendations-section { margin-bottom: var(--space-lg); }
+
+.rec-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+  border-left: 3px solid var(--color-info);
+}
+.rec-item.rec-warning { border-left-color: var(--color-warning); }
+.rec-item.rec-critical { border-left-color: var(--color-danger); }
+.rec-icon { font-size: 1.1rem; flex-shrink: 0; padding-top: 2px; }
+.rec-text { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.5; }
+.rec-category { font-weight: var(--fw-semibold); color: var(--text-primary); }
+
+/* Recent activity */
+.recent-section { margin-bottom: var(--space-lg); }
+
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-icon { font-size: 1rem; }
+.activity-text { flex: 1; font-size: var(--fs-sm); }
+.activity-time { font-size: var(--fs-xs); color: var(--text-muted); }
+
+/* Trend Charts */
+.trends-section { margin-bottom: var(--space-lg); }
+
+.trend-card {
+  background: var(--bg-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.trend-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: var(--space-sm);
+}
+.trend-title { font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
+.trend-value { font-size: var(--fs-sm); font-weight: var(--fw-bold); }
+.trend-chart {
+  width: 100%; height: 60px; overflow: visible;
+}
+.trend-chart svg { width: 100%; height: 100%; }
+.trend-line {
+  fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.trend-area { opacity: 0.15; }
+.trend-ideal-zone { fill: rgba(46, 204, 113, 0.1); }
+.trend-ideal-line {
+  stroke: rgba(46, 204, 113, 0.3); stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.trend-dot {
+  r: 3; fill: var(--bg-base); stroke-width: 2;
+}

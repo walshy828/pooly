@@ -1,0 +1,78 @@
+services:
+  # Local PostgreSQL — only starts if you run: docker compose --profile local-db up
+  # Skip this if using an external database (set DB_HOST in .env)
+  db:
+    image: postgres:16-alpine
+    container_name: pooly-db
+    profiles: ["local-db"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME:-pooly}
+      POSTGRES_USER: ${DB_USER:-pooly}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pooly_secret}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pooly}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pooly-net
+
+  api:
+    build: ./backend
+    container_name: pooly-api
+    ports:
+      - "${APP_PORT:-8080}:8000"
+    volumes:
+      - ./frontend:/app/static:ro
+    environment:
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-pooly}
+      - DB_PASSWORD=${DB_PASSWORD:-pooly_secret}
+      - DB_NAME=${DB_NAME:-pooly}
+      - HA_URL=${HA_URL:-}
+      - HA_TOKEN=${HA_TOKEN:-}
+      - HA_TEMP_ENTITY=${HA_TEMP_ENTITY:-}
+      - HA_PUMP_ENTITY=${HA_PUMP_ENTITY:-}
+      - HA_PUMP_ENERGY_ENTITY=${HA_PUMP_ENERGY_ENTITY:-}
+      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+      - WEATHER_LAT=${WEATHER_LAT:-}
+      - WEATHER_LON=${WEATHER_LON:-}
+      - APP_PIN=${APP_PIN:-}
+      - TZ=${TZ:-America/New_York}
+    restart: unless-stopped
+    networks:
+      - pooly-net
+
+  worker:
+    build: ./backend
+    container_name: pooly-worker
+    command: python -m app.worker.scheduler
+    environment:
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER:-pooly}
+      - DB_PASSWORD=${DB_PASSWORD:-pooly_secret}
+      - DB_NAME=${DB_NAME:-pooly}
+      - HA_URL=${HA_URL:-}
+      - HA_TOKEN=${HA_TOKEN:-}
+      - HA_TEMP_ENTITY=${HA_TEMP_ENTITY:-}
+      - HA_PUMP_ENTITY=${HA_PUMP_ENTITY:-}
+      - HA_PUMP_ENERGY_ENTITY=${HA_PUMP_ENERGY_ENTITY:-}
+      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+      - WEATHER_LAT=${WEATHER_LAT:-}
+      - WEATHER_LON=${WEATHER_LON:-}
+      - TZ=${TZ:-America/New_York}
+    restart: unless-stopped
+    networks:
+      - pooly-net
+
+volumes:
+  pgdata:
+
+networks:
+  pooly-net:
+    driver: bridge
