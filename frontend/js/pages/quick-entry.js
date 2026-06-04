@@ -10,18 +10,20 @@ const QuickEntryPage = {
   shockUnits: 1,
   healthScore: 7,
   completedStatuses: new Set(),
+  panelNotes: {},
 
   tabs: [
-    { id: 'test', label: '🔬 Water Test', name: 'Water Test' },
-    { id: 'chem', label: '💧 Chemicals', name: 'Chemicals' },
-    { id: 'maint', label: '🔧 Pool Care', name: 'Pool Care' },
-    { id: 'status', label: '✅ Quick Check', name: 'Quick Check' },
-    { id: 'note', label: '📝 Note', name: 'Note' },
+    { id: 'test',   label: '🔬 Water Test',   name: 'Water Test' },
+    { id: 'chem',   label: '💧 Chemicals',     name: 'Chemicals' },
+    { id: 'maint',  label: '🔧 Pool Care',     name: 'Pool Care' },
+    { id: 'status', label: '✅ Quick Check',   name: 'Quick Check' },
+    { id: 'note',   label: '📝 Note',          name: 'Note' },
   ],
 
   async render(container) {
     this.measurementValues = {};
     this.completedStatuses = new Set();
+    this.panelNotes = {};
     this.poolStatus = 'open';
 
     try {
@@ -37,7 +39,7 @@ const QuickEntryPage = {
         <div class="tab-bar" id="entryTabs">
           ${this.tabs.map(t => {
             const isDisabled = this.poolStatus === 'closed' && ['chem', 'maint', 'status'].includes(t.id);
-            return `<button class="tab-item${t.id === this.activeTab ? ' active' : ''}" 
+            return `<button class="tab-item${t.id === this.activeTab ? ' active' : ''}"
                             data-tab="${t.id}" ${isDisabled ? 'disabled' : ''}
                             title="${isDisabled ? 'Pool is closed' : ''}">${t.label}</button>`;
           }).join('')}
@@ -52,10 +54,12 @@ const QuickEntryPage = {
 
     document.getElementById('entryTabs').addEventListener('click', e => {
       const tab = e.target.closest('[data-tab]');
-      if (tab && !tab.disabled) { 
-        this.activeTab = tab.dataset.tab; 
-        this.renderPanel(); 
-        this.updateTabs(); 
+      if (tab && !tab.disabled) {
+        this.captureNotes();
+        this.activeTab = tab.dataset.tab;
+        history.replaceState(null, '', `#quick-entry/${tab.dataset.tab}`);
+        this.renderPanel();
+        this.updateTabs();
       }
     });
 
@@ -68,7 +72,11 @@ const QuickEntryPage = {
 
   updateTabs() {
     document.querySelectorAll('#entryTabs .tab-item').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === this.activeTab);
+      const isActive = btn.dataset.tab === this.activeTab;
+      btn.classList.toggle('active', isActive);
+      if (isActive) {
+        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
     });
   },
 
@@ -76,12 +84,26 @@ const QuickEntryPage = {
     const panel = document.getElementById('entryPanel');
     if (!panel) return;
     switch (this.activeTab) {
-      case 'test': panel.innerHTML = this.renderTestPanel(); this.bindTestPanel(); break;
-      case 'chem': panel.innerHTML = this.renderChemPanel(); this.bindChemPanel(); break;
-      case 'maint': panel.innerHTML = this.renderMaintPanel(); this.bindMaintPanel(); break;
+      case 'test':   panel.innerHTML = this.renderTestPanel();   this.bindTestPanel();   break;
+      case 'chem':   panel.innerHTML = this.renderChemPanel();   this.bindChemPanel();   break;
+      case 'maint':  panel.innerHTML = this.renderMaintPanel();  this.bindMaintPanel();  break;
       case 'status': panel.innerHTML = this.renderStatusPanel(); this.bindStatusPanel(); break;
-      case 'note': panel.innerHTML = this.renderNotePanel(); this.bindNotePanel(); break;
+      case 'note':   panel.innerHTML = this.renderNotePanel();   this.bindNotePanel();   break;
     }
+  },
+
+  captureNotes() {
+    const el = document.getElementById('panelNoteText');
+    if (el) this.panelNotes[this.activeTab] = el.value;
+  },
+
+  renderNotesSection(tab) {
+    const saved = this.panelNotes[tab] || '';
+    return `<div class="entry-notes-section">
+      <label class="entry-notes-label" for="panelNoteText">Notes <span class="entry-notes-optional">(optional)</span></label>
+      <textarea class="form-textarea entry-notes-textarea" id="panelNoteText"
+        placeholder="Any observations, context, or reminders..." rows="2">${saved}</textarea>
+    </div>`;
   },
 
   // ── TEST PANEL ──────────────────────────────────────────────
@@ -89,6 +111,7 @@ const QuickEntryPage = {
     let html = this.renderHealthSlider();
     const params = ['total_chlorine', 'free_chlorine', 'bromine', 'alkalinity', 'cyanuric_acid', 'ph'];
     params.forEach(param => { html += this.renderMeasurementGroup(param); });
+    html += this.renderNotesSection('test');
     html += `<div class="submit-area"><button class="btn btn-primary btn-block btn-lg" id="submitMeasurement">💾 Save Reading</button></div>`;
     return html;
   },
@@ -119,7 +142,6 @@ const QuickEntryPage = {
       return `<button class="meas-chip${sel}" data-param="${param}" data-value="${val}" style="background:${bg};--chip-glow:${bg}">${val}</button>`;
     }).join('');
     const selDisplay = selected != null ? `Selected: ${selected}${spec.unit ? ' ' + spec.unit : ''}` : '';
-    // Green zone ideal range indicator
     const idealBar = this.renderIdealRangeBar(spec);
     return `<div class="measurement-group">
       <div class="measurement-label">${spec.label} <span class="measurement-unit">${spec.unit}</span></div>
@@ -130,19 +152,20 @@ const QuickEntryPage = {
   },
 
   renderIdealRangeBar(spec) {
-    if (!spec.idealLow || !spec.idealHigh) return '';
-    const min = spec.options[0];
-    const max = spec.options[spec.options.length - 1];
-    const range = max - min;
-    if (range <= 0) return '';
-    const leftPct = ((spec.idealLow - min) / range * 100).toFixed(1);
-    const widthPct = ((spec.idealHigh - spec.idealLow) / range * 100).toFixed(1);
+    if (spec.idealLow == null || spec.idealHigh == null) return '';
+    const n = spec.options.length;
+    const idealStartIdx = spec.options.findIndex(v => v >= spec.idealLow);
+    let idealEndIdx = -1;
+    spec.options.forEach((v, i) => { if (v <= spec.idealHigh) idealEndIdx = i; });
+    if (idealStartIdx < 0 || idealEndIdx < 0 || idealEndIdx < idealStartIdx) return '';
+
+    const leftPct  = (idealStartIdx / n * 100).toFixed(1);
+    const widthPct = ((idealEndIdx - idealStartIdx + 1) / n * 100).toFixed(1);
+
     return `<div class="ideal-range-bar">
       <div class="ideal-range-fill" style="left:${leftPct}%;width:${widthPct}%"></div>
       <div class="ideal-range-label">
-        <span>${min}</span>
-        <span style="position:relative"><span class="ideal-tag" style="left:0">✓ Ideal: ${spec.idealLow}–${spec.idealHigh}${spec.unit ? ' '+spec.unit : ''}</span></span>
-        <span>${max}</span>
+        <span class="ideal-tag">✓ Ideal: ${spec.idealLow}–${spec.idealHigh}${spec.unit ? ' '+spec.unit : ''}</span>
       </div>
     </div>`;
   },
@@ -176,13 +199,15 @@ const QuickEntryPage = {
 
   async submitMeasurement() {
     try {
+      const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
       const hasValues = Object.keys(this.measurementValues).length > 0;
       if (hasValues) {
-        await API.addMeasurement(this.measurementValues);
+        await API.addMeasurement({ ...this.measurementValues, ...(notes ? { notes } : {}) });
       }
-      await API.addObservation({ health_score: this.healthScore });
+      await API.addObservation({ health_score: this.healthScore, ...(notes ? { notes } : {}) });
       Toast.success('Reading saved! 🎉');
       this.measurementValues = {};
+      this.panelNotes.test = '';
       this.renderPanel();
     } catch (err) { Toast.error('Failed to save: ' + err.message); }
   },
@@ -222,7 +247,11 @@ const QuickEntryPage = {
         </select></div>`;
     }
 
-    // Shock section
+    const notesSection = this.selectedChemical ? this.renderNotesSection('chem') : '';
+    const submitBtn = this.selectedChemical
+      ? `${notesSection}<button class="btn btn-primary btn-block" id="submitChem">💧 Log Chemicals</button>`
+      : '';
+
     const shockHtml = `<div class="section-title" style="margin-top:var(--space-xl)">Pool Shock</div>
       <div class="chlorine-form-toggle" style="margin-bottom:var(--space-md)">
         <button class="toggle-btn${this.shockType === 'bottle' ? ' active' : ''}" data-shock="bottle">🧴 Bottle</button>
@@ -239,13 +268,14 @@ const QuickEntryPage = {
     return `<div class="section-title">Add Chemicals</div>
       <div class="chemical-type-grid">${types}</div>
       ${formHtml}
-      ${this.selectedChemical ? `<button class="btn btn-primary btn-block" id="submitChem">💧 Log Chemicals</button>` : ''}
+      ${submitBtn}
       ${shockHtml}`;
   },
 
   bindChemPanel() {
     document.querySelectorAll('.chem-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        this.captureNotes();
         this.selectedChemical = btn.dataset.chem;
         this.chemAmount = 1;
         this.renderPanel();
@@ -254,6 +284,7 @@ const QuickEntryPage = {
 
     document.querySelectorAll('.toggle-btn[data-form]').forEach(btn => {
       btn.addEventListener('click', () => {
+        this.captureNotes();
         this.chemForm = btn.dataset.form;
         this.chemUnit = this.chemForm === 'tabs' ? '3" tabs' : 'oz';
         this.chemAmount = 1;
@@ -262,7 +293,11 @@ const QuickEntryPage = {
     });
 
     document.querySelectorAll('.toggle-btn[data-shock]').forEach(btn => {
-      btn.addEventListener('click', () => { this.shockType = btn.dataset.shock; this.renderPanel(); });
+      btn.addEventListener('click', () => {
+        this.captureNotes();
+        this.shockType = btn.dataset.shock;
+        this.renderPanel();
+      });
     });
 
     this.bindStepper('chemMinus', 'chemPlus', 'chemAmountDisplay', v => this.chemAmount = v, () => this.chemAmount, this.selectedChemical === 'chlorine' && this.chemForm === 'tabs' ? 1 : 0.5);
@@ -290,14 +325,21 @@ const QuickEntryPage = {
   async submitChemical() {
     if (!this.selectedChemical) return;
     try {
-      const unit = this.selectedChemical === 'chlorine' ? (this.chemForm === 'tabs' ? '3" tabs' : 'oz') : (document.getElementById('chemUnitSelect')?.value || 'oz');
+      const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
+      const unit = this.selectedChemical === 'chlorine'
+        ? (this.chemForm === 'tabs' ? '3" tabs' : 'oz')
+        : (document.getElementById('chemUnitSelect')?.value || 'oz');
       await API.addChemical({
         chemical_type: this.selectedChemical,
         form: this.selectedChemical === 'chlorine' ? this.chemForm : null,
-        amount: this.chemAmount, unit,
+        amount: this.chemAmount,
+        unit,
+        ...(notes ? { notes } : {}),
       });
       Toast.success(`${Fmt.chemicalLabel(this.selectedChemical)} logged! 💧`);
-      this.selectedChemical = null; this.chemAmount = 1;
+      this.selectedChemical = null;
+      this.chemAmount = 1;
+      this.panelNotes.chem = '';
       this.renderPanel();
     } catch (err) { Toast.error('Failed: ' + err.message); }
   },
@@ -306,7 +348,8 @@ const QuickEntryPage = {
     try {
       await API.addShock({ shock_type: this.shockType, units: this.shockUnits });
       Toast.success('Pool shock logged! ⚡');
-      this.shockUnits = 1; this.renderPanel();
+      this.shockUnits = 1;
+      this.renderPanel();
     } catch (err) { Toast.error('Failed: ' + err.message); }
   },
 
@@ -314,14 +357,17 @@ const QuickEntryPage = {
   renderMaintPanel() {
     const actions = [
       { type: 'clean_cartridge', icon: '🔧', label: 'Clean Filter Cartridge' },
-      { type: 'add_water', icon: '💧', label: 'Add Water' },
-      { type: 'backwash', icon: '♻️', label: 'Backwash Filter' },
-      { type: 'brush_walls', icon: '🖌️', label: 'Brush Walls' },
+      { type: 'add_water',       icon: '💧', label: 'Add Water' },
+      { type: 'backwash',        icon: '♻️', label: 'Backwash Filter' },
+      { type: 'brush_walls',     icon: '🖌️', label: 'Brush Walls' },
     ];
     const btns = actions.map(a => `<button class="quick-status-btn" data-action="${a.type}">
       <span class="qs-icon">${a.icon}</span><span class="qs-label">${a.label}</span></button>`).join('');
     return `<div class="section-title">Log Pool Care</div>
-      <div class="quick-status-grid">${btns}</div>`;
+      <div class="quick-status-grid">${btns}</div>
+      <div class="entry-notes-divider"></div>
+      ${this.renderNotesSection('maint')}
+      <button class="btn btn-secondary btn-block" id="submitMaintNote">📝 Save Note</button>`;
   },
 
   bindMaintPanel() {
@@ -334,6 +380,17 @@ const QuickEntryPage = {
         } catch (err) { Toast.error('Failed: ' + err.message); }
       });
     });
+
+    document.getElementById('submitMaintNote')?.addEventListener('click', async () => {
+      const text = document.getElementById('panelNoteText')?.value?.trim();
+      if (!text) { Toast.info('Enter a note first'); return; }
+      try {
+        await API.addNote(text);
+        Toast.success('Note saved! 📝');
+        document.getElementById('panelNoteText').value = '';
+        this.panelNotes.maint = '';
+      } catch (err) { Toast.error('Failed: ' + err.message); }
+    });
   },
 
   // ── QUICK STATUS PANEL ──────────────────────────────────────
@@ -344,7 +401,10 @@ const QuickEntryPage = {
         <span class="qs-icon">${s.icon}</span><span class="qs-label">${s.label}</span></button>`;
     }).join('');
     return `<div class="section-title">Quick Check</div>
-      <div class="quick-status-grid">${btns}</div>`;
+      <div class="quick-status-grid">${btns}</div>
+      <div class="entry-notes-divider"></div>
+      ${this.renderNotesSection('status')}
+      <button class="btn btn-secondary btn-block" id="submitStatusNote">📝 Save Note</button>`;
   },
 
   bindStatusPanel() {
@@ -358,13 +418,24 @@ const QuickEntryPage = {
         } catch (err) { Toast.error('Failed: ' + err.message); }
       });
     });
+
+    document.getElementById('submitStatusNote')?.addEventListener('click', async () => {
+      const text = document.getElementById('panelNoteText')?.value?.trim();
+      if (!text) { Toast.info('Enter a note first'); return; }
+      try {
+        await API.addNote(text);
+        Toast.success('Note saved! 📝');
+        document.getElementById('panelNoteText').value = '';
+        this.panelNotes.status = '';
+      } catch (err) { Toast.error('Failed: ' + err.message); }
+    });
   },
 
   // ── NOTE PANEL ──────────────────────────────────────────────
   renderNotePanel() {
     return `<div class="section-title">Quick Note</div>
       <div class="form-group">
-        <textarea class="form-textarea" id="noteText" placeholder="What's going on with the pool?" rows="5"></textarea>
+        <textarea class="form-textarea" id="noteText" placeholder="What's going on with the pool?" rows="6"></textarea>
       </div>
       <button class="btn btn-primary btn-block" id="submitNote">📝 Save Note</button>`;
   },

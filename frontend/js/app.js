@@ -4,11 +4,18 @@ const App = {
   contentEl: null,
   authenticated: false,
 
+  parseHash() {
+    const hash = location.hash.slice(1);
+    if (!hash) return { page: 'dashboard', tab: null };
+    const [rawPage, tab = null] = hash.split('/');
+    const pageMap = { journal: 'history', home: 'dashboard' };
+    return { page: pageMap[rawPage] || rawPage, tab };
+  },
+
   async init() {
     this.contentEl = document.getElementById('pageContent');
     if (!this.contentEl) return;
 
-    // Check PIN requirement
     try {
       const pinCheck = await API.checkPinRequired();
       if (pinCheck.pin_required) {
@@ -21,7 +28,18 @@ const App = {
 
     this.authenticated = true;
     this.renderNav();
-    this.navigate('dashboard');
+    this._startRouter();
+
+    const { page, tab } = this.parseHash();
+    await this.navigate(page, { tab, skipHash: true });
+  },
+
+  _startRouter() {
+    // Handles browser back/forward (entries created by pushState)
+    window.addEventListener('popstate', async () => {
+      const { page, tab } = this.parseHash();
+      await this.navigate(page, { tab, skipHash: true });
+    });
   },
 
   showPinOverlay() {
@@ -44,7 +62,9 @@ const App = {
             overlay.remove();
             this.authenticated = true;
             this.renderNav();
-            this.navigate('dashboard');
+            this._startRouter();
+            const { page, tab } = this.parseHash();
+            await this.navigate(page, { tab, skipHash: true });
           } else {
             document.getElementById('pinError').textContent = 'Incorrect PIN';
             input.value = '';
@@ -89,21 +109,31 @@ const App = {
     });
   },
 
-  async navigate(page) {
+  async navigate(page, options = {}) {
     if (!this.authenticated && page !== 'pin') return;
-    this.currentPage = page;
+    const { tab = null, skipHash = false } = options;
+
+    const validPages = ['dashboard', 'quick-entry', 'history', 'settings'];
+    const targetPage = validPages.includes(page) ? page : 'dashboard';
+
+    this.currentPage = targetPage;
     this.updateNavActive();
     this.contentEl.innerHTML = '';
-
-    // Scroll to top
     window.scrollTo(0, 0);
 
-    switch (page) {
+    if (!skipHash) {
+      const hashPage = targetPage === 'history' ? 'journal' : targetPage;
+      const newHash = tab ? `${hashPage}/${tab}` : hashPage;
+      history.pushState(null, '', `#${newHash}`);
+    }
+
+    switch (targetPage) {
       case 'dashboard':
         await DashboardPage.render(this.contentEl);
         break;
       case 'quick-entry':
-        QuickEntryPage.render(this.contentEl);
+        if (tab) QuickEntryPage.activeTab = tab;
+        await QuickEntryPage.render(this.contentEl);
         break;
       case 'history':
         await HistoryPage.render(this.contentEl);

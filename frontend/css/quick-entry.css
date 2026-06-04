@@ -81,23 +81,54 @@
   min-height: 18px; margin-top: var(--space-xs);
 }
 
-/* Green zone ideal range indicator */
+/* Green zone ideal range indicator — aligned to chip positions via JS index math */
 .ideal-range-bar {
   position: relative; height: 6px; border-radius: 3px;
   background: var(--bg-input); margin-top: var(--space-sm); overflow: visible;
 }
 .ideal-range-fill {
   position: absolute; height: 100%; border-radius: 3px;
-  background: linear-gradient(90deg, rgba(46,204,113,0.5), rgba(46,204,113,0.8), rgba(46,204,113,0.5));
-  box-shadow: 0 0 8px rgba(46,204,113,0.3);
+  background: linear-gradient(90deg, rgba(46,204,113,0.4), rgba(46,204,113,0.85), rgba(46,204,113,0.4));
+  box-shadow: 0 0 10px rgba(46,204,113,0.35);
 }
 .ideal-range-label {
-  display: flex; justify-content: space-between; margin-top: 2px;
-  font-size: 9px; color: var(--text-muted);
+  display: flex; justify-content: center; margin-top: 4px;
 }
-.ideal-range-label .ideal-tag {
-  position: absolute; top: -14px; font-size: 8px; font-weight: var(--fw-semibold);
-  color: var(--color-success); text-transform: uppercase; letter-spacing: 0.5px;
+.ideal-tag {
+  font-size: var(--fs-xs); font-weight: var(--fw-semibold);
+  color: var(--color-success); letter-spacing: 0.2px;
+}
+
+/* Entry notes section (inline with test/chem; standalone save for maint/status) */
+.entry-notes-section {
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+.entry-notes-label {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: var(--space-sm);
+}
+.entry-notes-optional {
+  font-weight: var(--fw-normal);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.entry-notes-textarea {
+  font-size: var(--fs-sm);
+  resize: none;
+  line-height: 1.5;
+}
+.entry-notes-divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: var(--space-xl) 0 var(--space-lg);
 }
 
 /* Chemical form */
@@ -148,4 +179,10 @@
 .submit-area {
   padding: var(--space-lg) 0;
   position: sticky; bottom: calc(var(--nav-height) + var(--space-md));
+}
+
+/* Disabled tab (pool closed) */
+.tab-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
