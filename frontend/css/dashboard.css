@@ -247,6 +247,114 @@
 
 .reminder-badge { flex-shrink: 0; }
 
+/* "→ Log Now" button style for form-required tasks */
+.reminder-action-done[data-form-task="true"] {
+  background: var(--color-accent);
+}
+
+/* Inline quick-log form (replaces Done/Skip when user taps Done on a direct task) */
+.reminder-log-form {
+  padding: var(--space-md);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-subtle);
+  animation: slideDown 0.2s ease;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.log-when-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+.log-when-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  flex-shrink: 0;
+  margin-right: var(--space-xs);
+}
+.log-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  flex: 1;
+}
+.log-preset {
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.log-preset.active {
+  border-color: var(--color-accent);
+  background: rgba(32, 178, 170, 0.15);
+  color: var(--color-accent);
+  font-weight: var(--fw-semibold);
+}
+.log-date-input {
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--fs-sm);
+  margin-top: var(--space-xs);
+}
+.log-note-textarea {
+  width: 100%;
+  padding: var(--space-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--fs-sm);
+  resize: none;
+  margin-top: var(--space-sm);
+  line-height: 1.5;
+}
+.log-form-btns {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  justify-content: flex-end;
+}
+.log-cancel {
+  padding: var(--space-xs) var(--space-md);
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: var(--font-family);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.log-confirm {
+  padding: var(--space-xs) var(--space-md);
+  background: var(--color-success);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+
 /* Weather section */
 .weather-section {
   margin-bottom: var(--space-lg);

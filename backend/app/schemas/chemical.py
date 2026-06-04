@@ -12,6 +12,7 @@ class ChemicalAdditionCreate(BaseModel):
     unit: Optional[str] = None
     cost: Optional[float] = None
     notes: Optional[str] = None
+    entry_date: Optional[datetime] = None
 
 
 class ChemicalAdditionResponse(BaseModel):

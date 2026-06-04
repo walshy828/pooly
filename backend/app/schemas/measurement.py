@@ -15,6 +15,7 @@ class MeasurementCreate(BaseModel):
     bromine: Optional[float] = None
     water_clarity: Optional[int] = None
     notes: Optional[str] = None
+    entry_date: Optional[datetime] = None
 
 
 class MeasurementResponse(BaseModel):

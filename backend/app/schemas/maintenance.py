@@ -9,6 +9,7 @@ class MaintenanceActionCreate(BaseModel):
     action_type: str
     details: Optional[dict[str, Any]] = None
     notes: Optional[str] = None
+    entry_date: Optional[datetime] = None
 
 
 class MaintenanceActionResponse(BaseModel):
@@ -26,6 +27,7 @@ class MaintenanceActionResponse(BaseModel):
 class PoolObservationCreate(BaseModel):
     health_score: int  # 1-10
     notes: Optional[str] = None
+    entry_date: Optional[datetime] = None
 
 
 class PoolObservationResponse(BaseModel):
@@ -41,6 +43,7 @@ class PoolObservationResponse(BaseModel):
 
 class QuickStatusCreate(BaseModel):
     status_type: str  # clear_water, clean_skimmer, robot_run, vacuumed, basket_emptied
+    entry_date: Optional[datetime] = None
 
 
 class QuickStatusResponse(BaseModel):
@@ -57,3 +60,9 @@ class ShockCreate(BaseModel):
     shock_type: str  # bottle, granular
     units: float  # number of bottles or bags
     notes: Optional[str] = None
+    entry_date: Optional[datetime] = None
+
+
+class NoteCreate(BaseModel):
+    notes: str
+    entry_date: Optional[datetime] = None

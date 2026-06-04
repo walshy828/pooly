@@ -1,45 +1,66 @@
 # Pooly API Reference
 
-This document covers all API endpoints relevant to the Home Assistant integration.
+This document covers all API endpoints. The Home Assistant integration sections are marked **[HA]**.
 
 ---
 
 ## Integration Architecture
 
-The recommended approach is a **Home Assistant custom integration** (custom component or HACS) that communicates with the Pooly backend over HTTP. This gives you full HA entity lifecycle management, lovelace card support, and service calls.
-
-### How it works
+The recommended approach is a **Home Assistant custom integration** (HACS) that communicates with the Pooly backend over HTTP.
 
 ```
 Home Assistant                     Pooly Backend
 ─────────────────────────────────────────────────
-Coordinator (poll every N min)  →  GET /api/ha/status
+Coordinator (poll every 5 min)  →  GET /api/ha/status
                                 →  GET /api/ha/maintenance
 
 HA sensor entities              ←  maintenance task state + attributes
 
-HA button / service call        →  POST /api/ha/maintenance/{task}/complete
-                                →  POST /api/ha/maintenance/{task}/dismiss
+HA button (physical tasks only) →  POST /api/ha/maintenance/{task}/complete
+HA button (all tasks)           →  POST /api/ha/maintenance/{task}/dismiss
 
 HA automation (state change)    →  POST /api/ha/sensor   (push temp/pump data)
 ```
 
+### Task completion model
+
+Maintenance tasks fall into two categories that determine how they can be completed:
+
+**Physical tasks** — can be marked complete from HA. A button entity is created for each.
+
+| task_type | Action |
+|-----------|--------|
+| `clean_cartridge` | Creates a `MaintenanceAction` journal entry |
+| `add_water` | Creates a `MaintenanceAction` journal entry |
+| `backwash` | Creates a `MaintenanceAction` journal entry |
+| `brush_walls` | Creates a `MaintenanceAction` journal entry |
+| `clean_skimmer` | Creates a `QuickStatus` journal entry |
+| `robot_run` | Creates a `QuickStatus` journal entry |
+| `vacuum` | Creates a `QuickStatus` journal entry |
+| `empty_basket` | Creates a `QuickStatus` journal entry |
+
+**Pooly app only tasks** — must be completed by logging a journal entry in the Pooly app. The `/complete` endpoint returns **405** for these task types. They auto-complete when the matching journal entry is saved:
+
+| task_type | Completed automatically when… |
+|-----------|-------------------------------|
+| `test_water` | A measurement entry is saved (`POST /api/measurements`) |
+| `check_cya` | A measurement entry including CYA is saved |
+| `add_chlorine` | A chlorine chemical addition is saved (`POST /api/chemicals`) |
+| `shock_pool` | A shock entry is saved (`POST /api/shock`) |
+
+HA can still **dismiss** (snooze) any task type regardless of category.
+
 ### Recommended HA entity model
 
-| Pooly concept         | HA entity type | State value              |
-|-----------------------|----------------|--------------------------|
-| Maintenance task      | `sensor`       | `urgent` / `overdue` / `due_soon` / `good` |
-| Pool status           | `binary_sensor`| `on` = open, `off` = closed |
-| Health score          | `sensor`       | 1–10                     |
-| Pool temperature      | `sensor`       | °F value                 |
-| Pump state            | `binary_sensor`| `on` / `off`             |
-| Mark task complete    | `button`       | triggers POST complete   |
-| Dismiss task          | `button`       | triggers POST dismiss    |
-
-### Polling interval
-
-- `/api/ha/status` — poll every 5–10 minutes via the HA DataUpdateCoordinator
-- `/api/ha/maintenance` — poll every 5–10 minutes, or on demand after an action
+| Pooly concept | HA entity type | State value |
+|---|---|---|
+| Maintenance task | `sensor` | `urgent` / `overdue` / `due_soon` / `good` |
+| Pool status | `binary_sensor` | `on` = open, `off` = closed |
+| Health score | `sensor` | 1–10 |
+| Pool temperature | `sensor` | °F value |
+| Pump state | `binary_sensor` | `on` / `off` |
+| Mark task complete (physical only) | `button` | triggers POST complete |
+| Dismiss task (all tasks) | `button` | triggers POST dismiss |
 
 ### Authentication
 
@@ -59,11 +80,7 @@ All paths below are relative to this base.
 
 ## Home Assistant Endpoints
 
-These endpoints are purpose-built for the HA integration, returning sensor-friendly payloads.
-
----
-
-### GET /ha/status
+### GET /ha/status **[HA]**
 
 Combined status poll — everything HA needs in one request.
 
@@ -90,8 +107,6 @@ Combined status poll — everything HA needs in one request.
 }
 ```
 
-**Field notes**
-
 | Field | Values | Notes |
 |-------|--------|-------|
 | `pool_status` | `open` / `closed` | Suppresses maintenance reminders when closed |
@@ -101,9 +116,9 @@ Combined status poll — everything HA needs in one request.
 
 ---
 
-### GET /ha/maintenance
+### GET /ha/maintenance **[HA]**
 
-All maintenance tasks as sensor-friendly objects. Suitable for entity creation at startup.
+All maintenance tasks as sensor-friendly objects.
 
 **Response**
 
@@ -112,35 +127,19 @@ All maintenance tasks as sensor-friendly objects. Suitable for entity creation a
   {
     "task_type": "test_water",
     "display_name": "Test Water Chemistry",
-    "state": "urgent",
+    "state": "overdue",
     "priority": "high",
     "icon": "🔬",
     "interval_days": 3,
-    "last_completed": null,
-    "next_due": null,
-    "days_since": null,
-    "days_until_due": null,
-    "recommendation": null,
-    "enabled": true
-  },
-  {
-    "task_type": "clean_skimmer",
-    "display_name": "Clean Skimmer Basket",
-    "state": "good",
-    "priority": "normal",
-    "icon": "🧹",
-    "interval_days": 7,
-    "last_completed": "2026-06-02T10:00:00+00:00",
-    "next_due": "2026-06-09T10:00:00+00:00",
-    "days_since": 2,
-    "days_until_due": 5,
-    "recommendation": null,
+    "last_completed": "2026-06-01T10:00:00+00:00",
+    "next_due": "2026-06-04T10:00:00+00:00",
+    "days_since": 3,
+    "days_until_due": 0,
+    "recommendation": "Last done 3 days ago. Due every 3 days.",
     "enabled": true
   }
 ]
 ```
-
-**State values**
 
 | State | Meaning |
 |-------|---------|
@@ -149,42 +148,28 @@ All maintenance tasks as sensor-friendly objects. Suitable for entity creation a
 | `due_soon` | Due within 1 day |
 | `good` | Not yet due |
 
-**Sensor attributes**
-
-Map all fields except `state` as HA entity attributes.
-
 ---
 
-### GET /ha/maintenance/{task_type}
+### GET /ha/maintenance/{task_type} **[HA]**
 
 Single maintenance task status. Useful for refreshing one entity after an action.
 
-**Path parameter:** `task_type` — see [Task Types Reference](#task-types-reference)
-
-**Response:** Same shape as one object from the list above.
-
-**Errors**
-
-| Code | Meaning |
-|------|---------|
-| 404 | `task_type` not found |
+**Errors:** `404` if `task_type` not found.
 
 ---
 
-### POST /ha/maintenance/{task_type}/complete
+### POST /ha/maintenance/{task_type}/complete **[HA]**
 
-Mark a maintenance task as complete from Home Assistant.
+Mark a **physical** maintenance task as complete from Home Assistant.
 
-Creates an appropriate journal entry in Pooly and advances the schedule clock.
+Creates the appropriate journal entry and advances the schedule clock.
 
-**Path parameter:** `task_type`
+> **Note:** This endpoint returns `405 Method Not Allowed` for Pooly app only tasks (`test_water`, `add_chlorine`, `check_cya`, `shock_pool`). Those tasks auto-complete when the matching journal entry is saved in the Pooly app. Use **Dismiss** from HA if you need to snooze the reminder.
 
-**Request body** (optional, send `{}` or omit body)
+**Request body** (optional)
 
 ```json
-{
-  "notes": "Cleaned thoroughly, replaced O-ring"
-}
+{ "notes": "Cleaned thoroughly, replaced O-ring" }
 ```
 
 **Response**
@@ -198,38 +183,20 @@ Creates an appropriate journal entry in Pooly and advances the schedule clock.
 }
 ```
 
-**Journal record created by task type**
-
-| Task type | Journal record created |
-|-----------|----------------------|
-| `clean_cartridge` | `MaintenanceAction` (action_type: clean_cartridge) |
-| `add_water` | `MaintenanceAction` (action_type: add_water) |
-| `backwash` | `MaintenanceAction` (action_type: backwash) |
-| `brush_walls` | `MaintenanceAction` (action_type: brush_walls) |
-| `clean_skimmer` | `QuickStatus` (status_type: clean_skimmer) |
-| `robot_run` | `QuickStatus` (status_type: robot_run) |
-| `vacuum` | `QuickStatus` (status_type: vacuumed) |
-| `empty_basket` | `QuickStatus` (status_type: basket_emptied) |
-| `test_water` | Note entry ("Completed via Home Assistant") |
-| `add_chlorine` | Note entry ("Completed via Home Assistant") |
-| `check_cya` | Note entry ("Completed via Home Assistant") |
-| `shock_pool` | Note entry ("Completed via Home Assistant") |
-
 **Errors**
 
 | Code | Meaning |
 |------|---------|
 | 404 | `task_type` not found |
+| 405 | Task requires a Pooly app journal entry to complete (`test_water`, `add_chlorine`, `check_cya`, `shock_pool`) |
 
 ---
 
-### POST /ha/maintenance/{task_type}/dismiss
+### POST /ha/maintenance/{task_type}/dismiss **[HA]**
 
-Dismiss/skip a maintenance task from Home Assistant.
+Dismiss/skip any maintenance task from Home Assistant.
 
-Resets the schedule clock (advances `next_due` by `interval_days`) **without** creating a journal entry. Use this when you want to snooze a reminder without recording the task as done.
-
-**Path parameter:** `task_type`
+Resets the schedule clock (advances `next_due` by `interval_days`) **without** creating a journal entry. Available for all task types including Pooly app only tasks.
 
 **No request body.**
 
@@ -237,24 +204,20 @@ Resets the schedule clock (advances `next_due` by `interval_days`) **without** c
 
 ```json
 {
-  "task_type": "clean_skimmer",
+  "task_type": "test_water",
   "status": "dismissed",
   "dismissed_at": "2026-06-04T14:30:00+00:00",
-  "next_due": "2026-06-11T14:30:00+00:00"
+  "next_due": "2026-06-07T14:30:00+00:00"
 }
 ```
 
-**Errors**
-
-| Code | Meaning |
-|------|---------|
-| 404 | `task_type` not found |
+**Errors:** `404` if `task_type` not found.
 
 ---
 
-### POST /ha/sensor
+### POST /ha/sensor **[HA]**
 
-Push sensor data from Home Assistant to Pooly. Call this from HA automations when the relevant entity state changes so the data appears on the Pooly dashboard.
+Push sensor data from Home Assistant to Pooly.
 
 **Request body**
 
@@ -270,7 +233,7 @@ Push sensor data from Home Assistant to Pooly. Call this from HA automations whe
 | Field | Required | Description |
 |-------|----------|-------------|
 | `sensor_type` | Yes | `pool_temp`, `pump_state`, or `pump_energy` |
-| `value` | Yes | Numeric value. For `pump_state` use `1` = on, `0` = off |
+| `value` | Yes | Numeric. For `pump_state`: `1` = on, `0` = off |
 | `unit` | No | `"°F"`, `"kWh"`, etc. |
 | `entity_id` | No | HA entity ID for traceability |
 
@@ -285,33 +248,193 @@ Push sensor data from Home Assistant to Pooly. Call this from HA automations whe
 }
 ```
 
-**Errors**
+`status` is `"unchanged"` when the new value matches the most recently stored value (deduplication — pump state and pool temp only; `pump_energy` is always written).
 
-| Code | Meaning |
-|------|---------|
-| 400 | Invalid `sensor_type` |
+**Errors:** `400` for invalid `sensor_type`.
 
 ---
 
-## Other Endpoints Useful for HA
+## Entry Endpoints
 
-These are the existing Pooly API endpoints that the HA integration may also want to call.
+All entry creation endpoints accept an optional `entry_date` field (ISO 8601 datetime string). When omitted the backend uses the current time. When provided, the journal timestamp, the child record timestamp (`measured_at`, `performed_at`, etc.), and the maintenance schedule clock all use the supplied date — supporting backdated logging.
+
+---
+
+### POST /measurements
+
+Log a water chemistry reading.
+
+**Request body**
+
+```json
+{
+  "ph": 7.4,
+  "free_chlorine": 3.0,
+  "total_chlorine": 3.5,
+  "alkalinity": 100,
+  "cyanuric_acid": 40,
+  "calcium_hardness": 250,
+  "bromine": null,
+  "notes": "After adding pH down yesterday",
+  "entry_date": "2026-06-02T12:00:00+00:00"
+}
+```
+
+All chemistry fields are optional floats/integers. Omit fields you didn't measure.
+
+**Auto-advances schedules:** `test_water` always; `check_cya` when `cyanuric_acid` is provided.
+
+**Response:** `MeasurementResponse` with `id`, `journal_entry_id`, `measured_at`, and all chemistry fields.
 
 ---
 
-### GET /dashboard
+### POST /chemicals
 
-Full dashboard payload. Use this if you need chemistry readings, recommendations, or weather data in addition to maintenance status. Heavier than `/ha/status` — prefer `/ha/status` for routine polling.
+Log a chemical addition.
 
-**Response includes:**
-- `pool_status`, `health_score`, `health_label`
-- `chemistry` — array of chemistry parameters with `status` (ok/low/high/critical) and `value`
-- `reminders` — maintenance reminders with urgency
-- `sensors` — latest pool_temp, pump_state, pump_energy
-- `weather` — current conditions and pool impact analysis
-- `recommendations` — dosage recommendations
+**Request body**
+
+```json
+{
+  "chemical_type": "chlorine",
+  "form": "tabs",
+  "amount": 3,
+  "unit": "3\" tabs",
+  "notes": "Topped up the floater",
+  "entry_date": null
+}
+```
+
+| Field | Values |
+|-------|--------|
+| `chemical_type` | `chlorine`, `ph_up`, `ph_down`, `alkalinity`, `cyanuric_acid`, `hardener`, `algaecide`, `clarifier` |
+| `form` | `tabs`, `granular` (chlorine only) |
+| `unit` | `oz`, `lbs`, `cups`, `gallons`, `3" tabs` |
+
+**Auto-advances schedules:** `add_chlorine` when `chemical_type` is `chlorine`; `check_cya` when `chemical_type` is `cyanuric_acid`.
 
 ---
+
+### POST /shock
+
+Log a pool shock treatment.
+
+**Request body**
+
+```json
+{
+  "shock_type": "bottle",
+  "units": 2,
+  "notes": "Shocked after heavy rain",
+  "entry_date": null
+}
+```
+
+| Field | Values |
+|-------|--------|
+| `shock_type` | `bottle`, `granular` |
+| `units` | Number of bottles or bags |
+
+**Auto-advances schedule:** `shock_pool`.
+
+---
+
+### POST /maintenance
+
+Log a physical pool maintenance action.
+
+**Request body**
+
+```json
+{
+  "action_type": "clean_cartridge",
+  "notes": "Soaked in filter cleaner overnight",
+  "entry_date": "2026-06-01T12:00:00+00:00"
+}
+```
+
+| `action_type` | Schedule advanced |
+|---|---|
+| `clean_cartridge` | `clean_cartridge` |
+| `add_water` | `add_water` |
+| `backwash` | `backwash` |
+| `brush_walls` | `brush_walls` |
+
+---
+
+### POST /observations
+
+Log a pool health score observation.
+
+**Request body**
+
+```json
+{
+  "health_score": 8,
+  "notes": "Clarity has improved since last week",
+  "entry_date": null
+}
+```
+
+`health_score` must be an integer 1–10.
+
+---
+
+### POST /quick-status
+
+Log a quick status check.
+
+**Request body**
+
+```json
+{
+  "status_type": "clean_skimmer",
+  "entry_date": null
+}
+```
+
+| `status_type` | Schedule advanced |
+|---|---|
+| `clean_skimmer` | `clean_skimmer` |
+| `robot_run` | `robot_run` |
+| `vacuumed` | `vacuum` |
+| `basket_emptied` | `empty_basket` |
+| `clear_water` | *(none)* |
+
+---
+
+### POST /notes
+
+Save a freeform journal note.
+
+**Request body**
+
+```json
+{
+  "notes": "Noticed slight green tinge near the steps — will monitor.",
+  "entry_date": null
+}
+```
+
+---
+
+### POST /maintenance/dismiss/{task_type}
+
+Reset a maintenance schedule clock without creating a journal entry. Useful for snoozing reminders.
+
+**Response**
+
+```json
+{
+  "task_type": "clean_skimmer",
+  "status": "dismissed",
+  "reset_at": "2026-06-04T14:30:00+00:00"
+}
+```
+
+---
+
+## Settings Endpoints
 
 ### GET /settings
 
@@ -319,15 +442,33 @@ Pool configuration and all maintenance schedules.
 
 **Response includes:**
 - `pool` — name, volume, shape, filter type, sanitizer type, pool status
-- `schedules` — all schedules with `interval_days`, `last_completed`, `next_due`, `priority`, `enabled`
+- `schedules` — all 12 schedules with `interval_days`, `last_completed`, `next_due`, `priority`, `enabled`
+
+---
+
+### PUT /settings/pool
+
+Update pool configuration.
+
+**Request body** (all fields optional)
+
+```json
+{
+  "name": "Backyard Pool",
+  "volume_gallons": 15000,
+  "pool_shape": "rectangle",
+  "filter_type": "cartridge",
+  "sanitizer_type": "chlorine"
+}
+```
 
 ---
 
 ### PUT /settings/schedule/{task_type}
 
-Update a maintenance schedule's configuration.
+Update a maintenance schedule.
 
-**Request body**
+**Request body** (all fields optional)
 
 ```json
 {
@@ -337,19 +478,13 @@ Update a maintenance schedule's configuration.
 }
 ```
 
-All fields optional. Only provided fields are updated.
-
 ---
 
 ### POST /settings/pool/open
 
 Mark the pool as open for the season.
 
-**Request body** (optional)
-
-```json
-{ "notes": "Opened for 2026 season" }
-```
+**Query parameter:** `notes` (optional string)
 
 ---
 
@@ -357,19 +492,11 @@ Mark the pool as open for the season.
 
 Mark the pool as closed / winterized.
 
-**Request body** (optional)
-
-```json
-{ "notes": "Winterized, added closing chemical kit" }
-```
+**Query parameter:** `notes` (optional string)
 
 ---
 
-### POST /maintenance/dismiss/{task_type}
-
-Existing dismiss endpoint (same behaviour as `/ha/maintenance/{task_type}/dismiss`). Included for completeness — prefer the `/ha/` prefixed version in new integrations.
-
----
+## Journal Endpoints
 
 ### GET /journal
 
@@ -381,50 +508,81 @@ Paginated journal of all logged activities.
 |-------|---------|-------------|
 | `page` | 1 | Page number |
 | `page_size` | 20 | Items per page (max 100) |
-| `entry_type` | — | Filter: measurement, chemical, maintenance, quick_status, note, shock, observation, pool_event |
+| `entry_type` | — | Filter: `measurement`, `chemical`, `maintenance`, `quick_status`, `note`, `shock`, `observation`, `pool_event` |
 | `start_date` | — | ISO date string |
 | `end_date` | — | ISO date string |
+| `sub_type` | — | Secondary filter (e.g. specific `action_type` or `chemical_type`) |
+
+---
+
+### GET /journal/{id}
+
+Single journal entry with full detail.
+
+---
+
+### PUT /journal/{id}
+
+Update a journal entry (edit notes, change values).
+
+---
+
+### DELETE /journal/{id}
+
+Delete a journal entry.
 
 ---
 
 ### GET /journal/trends
 
-Chemistry trends for charting.
+Chemistry trends for sparkline charts.
 
 **Query parameter:** `days` (default 30) — how many days back to include.
 
 ---
 
+## Dashboard Endpoint
+
+### GET /dashboard
+
+Full dashboard payload. Heavier than `/ha/status` — use this when you need chemistry readings, recommendations, or weather in addition to maintenance status.
+
+**Response includes:**
+- `pool_status`, `health_score`, `health_label`
+- `chemistry` — array of parameters with `status` (`ok` / `low` / `high` / `critical`) and `value`
+- `reminders` — maintenance reminders with urgency, `days_since`, `interval_days`
+- `sensors` — latest pool_temp, pump_state, pump_energy
+- `weather` — current conditions and pool impact analysis
+- `recommendations` — chemistry dosage recommendations
+
+---
+
 ## Task Types Reference
 
-These are the valid `task_type` values for the maintenance endpoints:
-
-| task_type | Display Name | Default Interval | Priority |
-|-----------|-------------|-----------------|----------|
-| `test_water` | Test Water Chemistry | 3 days | high |
-| `add_chlorine` | Add Chlorine | 3 days | high |
-| `clean_cartridge` | Clean Filter Cartridge | 30 days | normal |
-| `shock_pool` | Shock Pool | 14 days | normal |
-| `clean_skimmer` | Clean Skimmer Basket | 7 days | normal |
-| `robot_run` | Run Pool Robot | 7 days | low |
-| `vacuum` | Vacuum Pool | 14 days | low |
-| `empty_basket` | Empty Pump Basket | 7 days | normal |
-| `add_water` | Check Water Level | 7 days | low |
-| `brush_walls` | Brush Pool Walls | 7 days | low |
-| `check_cya` | Check CYA Level | 30 days | normal |
-| `backwash` | Backwash / Deep Clean Filter | 30 days | normal |
+| task_type | Display Name | Interval | Priority | Completion method |
+|-----------|-------------|---------|----------|-------------------|
+| `test_water` | Test Water Chemistry | 3 days | high | Pooly app only |
+| `add_chlorine` | Add Chlorine | 3 days | high | Pooly app only |
+| `shock_pool` | Shock Pool | 14 days | normal | Pooly app only |
+| `check_cya` | Check CYA Level | 30 days | normal | Pooly app only |
+| `clean_cartridge` | Clean Filter Cartridge | 30 days | normal | HA or Pooly app |
+| `backwash` | Backwash / Deep Clean Filter | 30 days | normal | HA or Pooly app |
+| `clean_skimmer` | Clean Skimmer Basket | 7 days | normal | HA or Pooly app |
+| `empty_basket` | Empty Pump Basket | 7 days | normal | HA or Pooly app |
+| `robot_run` | Run Pool Robot | 7 days | low | HA or Pooly app |
+| `vacuum` | Vacuum Pool | 14 days | low | HA or Pooly app |
+| `add_water` | Check Water Level | 7 days | low | HA or Pooly app |
+| `brush_walls` | Brush Pool Walls | 7 days | low | HA or Pooly app |
 
 ---
 
 ## Sensor Types Reference
 
-Valid `sensor_type` values for `POST /ha/sensor`:
-
 | sensor_type | Unit | Notes |
 |-------------|------|-------|
-| `pool_temp` | `°F` | Pool water temperature |
-| `pump_state` | — | `1` = on, `0` = off |
-| `pump_energy` | `kWh` | Pump energy consumption |
+| `pool_temp` | `°F` | Pool water temperature; deduplicated within 0.5°F |
+| `pump_state` | — | `1` = on, `0` = off; deduplicated on exact match |
+| `pump_energy` | `kWh` | Pump energy consumption; always written |
 
 ---
 
@@ -432,45 +590,36 @@ Valid `sensor_type` values for `POST /ha/sensor`:
 
 ### Startup
 
-1. Call `GET /ha/maintenance` — create one `sensor` entity per task, one `button` entity each for complete and dismiss.
-2. Call `GET /ha/status` — create pool status `binary_sensor`, health score `sensor`, temp `sensor`, pump `binary_sensor`.
+1. `GET /ha/maintenance` — create one `sensor` entity per task. For physical tasks, also create a "Mark Complete" `button`. For all tasks, create a "Dismiss" `button`.
+2. `GET /ha/status` — create pool status `binary_sensor`, health score `sensor`, temperature `sensor`, pump `binary_sensor`.
 
 ### Coordinator update (every 5 min)
 
-1. Call `GET /ha/status` — update pool-level entities.
-2. Call `GET /ha/maintenance` — update all maintenance sensor states and attributes.
+1. `GET /ha/status` — update pool-level entities.
+2. `GET /ha/maintenance` — update all task sensor states and attributes.
 
-### User presses "Mark Complete" button in HA
+### User presses "Mark Complete" button (physical task)
 
-1. Call `POST /ha/maintenance/{task_type}/complete` with optional `{ "notes": "..." }`.
-2. On success, immediately refresh the entity from `GET /ha/maintenance/{task_type}`.
+1. `POST /api/ha/maintenance/{task_type}/complete` with optional `{ "notes": "..." }`.
+2. On success, immediately refresh from `GET /api/ha/maintenance/{task_type}`.
 
-### User presses "Dismiss" button in HA
+### Pooly app only task completes automatically
 
-1. Call `POST /ha/maintenance/{task_type}/dismiss`.
+When the user logs a water test in the Pooly app (`POST /api/measurements`), the backend calls `update_schedule_completion("test_water")` automatically. The next coordinator poll will see the task move to `good` — no HA action required.
+
+### User presses "Dismiss" button (any task)
+
+1. `POST /api/ha/maintenance/{task_type}/dismiss`.
 2. Refresh the entity state.
 
 ### Push sensor data from HA
 
-In a HA automation triggered by `state_changed` on your pool thermometer:
-
 ```yaml
 action:
-  - service: rest_command.pooly_push_temp
+  - service: pooly.push_sensor
     data:
       sensor_type: pool_temp
       value: "{{ states('sensor.pool_thermometer') | float }}"
       unit: "°F"
       entity_id: sensor.pool_thermometer
-```
-
-Where `rest_command.pooly_push_temp` is defined in `configuration.yaml`:
-
-```yaml
-rest_command:
-  pooly_push_temp:
-    url: http://your-pooly-host/api/ha/sensor
-    method: POST
-    content_type: application/json
-    payload: '{"sensor_type": "{{ sensor_type }}", "value": {{ value }}, "unit": "{{ unit }}", "entity_id": "{{ entity_id }}"}'
 ```

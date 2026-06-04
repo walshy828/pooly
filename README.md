@@ -1,6 +1,6 @@
 # Pooly
 
-A self-hosted pool management app. Log water chemistry, track maintenance tasks, monitor your pump and temperature, and get reminders when something needs attention — all from a clean web UI and optionally through Home Assistant.
+A self-hosted pool management app. Log water chemistry, track maintenance tasks, monitor your pump and temperature, and get reminders when something needs attention — all from a clean mobile-first web UI and optionally through Home Assistant.
 
 ---
 
@@ -8,6 +8,12 @@ A self-hosted pool management app. Log water chemistry, track maintenance tasks,
 
 - [Quick Start](#quick-start)
 - [Configuration Reference](#configuration-reference)
+- [Using the App](#using-the-app)
+  - [Quick Entry](#quick-entry)
+  - [Pool Care Reminders](#pool-care-reminders)
+  - [Backdating Entries](#backdating-entries)
+  - [Notes](#notes)
+  - [Deep Links](#deep-links)
 - [Home Assistant Integration](#home-assistant-integration)
   - [Push Mode vs. Pull Mode](#push-mode-vs-pull-mode)
   - [Setting Up Push Mode (Recommended)](#setting-up-push-mode-recommended)
@@ -79,9 +85,77 @@ All settings are read from environment variables. Copy `.env.example` to `.env` 
 
 ---
 
+## Using the App
+
+### Quick Entry
+
+The **➕ Add** tab at the bottom of the app provides a five-panel quick-entry interface:
+
+| Tab | Purpose |
+|-----|---------|
+| 🔬 Water Test | Log pH, chlorine, alkalinity, CYA, and other readings with a pool health score |
+| 💧 Chemicals | Log chemical additions (chlorine tabs/granular, pH up/down, algaecide, etc.) and pool shock |
+| 🔧 Pool Care | Log physical maintenance tasks (clean filter, backwash, add water, brush walls) |
+| ✅ Quick Check | Tap-to-log status checks (skimmer, robot, vacuum, basket) |
+| 📝 Note | Save a freeform note about pool conditions |
+
+Each entry panel also has an optional **Notes** field for associating context with any log entry.
+
+### Pool Care Reminders
+
+The dashboard shows your maintenance schedule with urgency badges. Tapping a reminder reveals action buttons:
+
+- **Physical tasks** (Clean Filter, Add Water, Backwash, Brush Walls, Clean Skimmer, Robot Run, Vacuum, Empty Basket) — tapping **Done** shows a quick inline log form with date presets and an optional note. The journal entry is created immediately and the reminder clock resets.
+
+- **Chemistry and chemical tasks** (Test Water Chemistry, Add Chlorine, Check CYA Level, Shock Pool) — tapping **→ Log Now** navigates directly to the relevant entry form. When you submit the form, the corresponding reminder is automatically marked complete:
+  - Submitting a water test → completes **Test Water Chemistry** and **Check CYA Level** (if CYA was entered)
+  - Logging a chlorine addition → completes **Add Chlorine**
+  - Logging a pool shock → completes **Shock Pool**
+
+- **Skip** on any task resets the schedule clock without creating a journal entry (useful for snoozing a reminder you addressed informally).
+
+> This linkage works both ways: logging a water test from the Quick Entry tab also advances the Test Water Chemistry reminder clock, not just when you tap "Log Now" from the reminder.
+
+### Backdating Entries
+
+All entry forms show a **📅 date row** at the top that defaults to Today. Tap it to open the date picker and select a past date.
+
+When you backdate an entry, the journal timestamp and the maintenance schedule clock both reflect the date you entered. For example, logging "I cleaned the filter 3 days ago" sets the filter's `last_completed` to 3 days ago and calculates `next_due` from that date.
+
+The **inline log form** for physical task reminders also has quick date presets: Today, Yesterday, 2 days ago, 3 days ago, and a custom date picker.
+
+### Notes
+
+Every entry type supports an optional notes field:
+
+- **Water Test, Chemicals**: notes appear in the entry form and are saved with the journal record.
+- **Pool Care, Quick Check**: notes are entered in a separate section at the bottom of the panel with its own **Save Note** button, creating a standalone note entry associated with the pool care session.
+- **Standalone notes**: the dedicated 📝 Note tab saves a freeform journal entry with no other data attached.
+
+All notes appear in the Journal view alongside their parent entries.
+
+### Deep Links
+
+The app supports hash-based URLs so you can bookmark or share direct links to any section. These work as home screen shortcuts on iOS and Android:
+
+| URL fragment | Destination |
+|---|---|
+| `#dashboard` | Home dashboard |
+| `#journal` | Journal / history |
+| `#settings` | Settings |
+| `#quick-entry/test` | Add water test |
+| `#quick-entry/chem` | Add chemicals |
+| `#quick-entry/maint` | Log pool care |
+| `#quick-entry/status` | Quick check |
+| `#quick-entry/note` | Add a note |
+
+Browser back and forward navigate between pages as expected. Switching tabs within Quick Entry does not create extra history entries.
+
+---
+
 ## Home Assistant Integration
 
-Pooly has a companion [HACS integration](https://github.com/walshy828/pooly_connector) that surfaces pool data as native HA entities and lets you mark maintenance tasks complete or dismiss them directly from HA dashboards and automations.
+Pooly has a companion [HACS integration](https://github.com/walshy828/pooly_connector) that surfaces pool data as native HA entities and lets you interact with maintenance tasks directly from HA dashboards and automations.
 
 ### Push Mode vs. Pull Mode
 

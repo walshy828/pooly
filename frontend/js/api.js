@@ -37,7 +37,9 @@ const API = {
   addShock(data) { return this._fetch('/shock', { method: 'POST', body: data }); },
   addObservation(data) { return this._fetch('/observations', { method: 'POST', body: data }); },
   addQuickStatus(data) { return this._fetch('/quick-status', { method: 'POST', body: data }); },
-  addNote(notes) { return this._fetch(`/notes?notes=${encodeURIComponent(notes)}`, { method: 'POST' }); },
+  addNote(notes, entryDate = null) {
+    return this._fetch('/notes', { method: 'POST', body: { notes, ...(entryDate ? { entry_date: entryDate } : {}) } });
+  },
 
   // Journal
   getJournal(page = 1, pageSize = 20, filters = {}) {

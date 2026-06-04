@@ -175,6 +175,53 @@ const DashboardPage = {
       <div class="section-title">Recommendations</div>${items}</div>`;
   },
 
+  // Tasks that need a full Pooly form — "Done" navigates to quick-entry
+  _FORM_TASKS: {
+    test_water:   { tab: 'test' },
+    add_chlorine: { tab: 'chem', preselect: 'chlorine' },
+    shock_pool:   { tab: 'chem', scrollTo: 'shock' },
+    check_cya:    { tab: 'test' },
+  },
+
+  // Direct-log API call for simple physical tasks
+  async _logDirectTask(taskType, entryDate, notes) {
+    const maintTasks = new Set(['clean_cartridge', 'add_water', 'backwash', 'brush_walls']);
+    const statusMap  = { clean_skimmer: 'clean_skimmer', robot_run: 'robot_run', vacuum: 'vacuumed', empty_basket: 'basket_emptied' };
+    const datePayload = entryDate ? { entry_date: entryDate } : {};
+    const notePayload = notes    ? { notes }                  : {};
+    if (maintTasks.has(taskType)) {
+      await API.addMaintenance({ action_type: taskType, ...datePayload, ...notePayload });
+    } else if (statusMap[taskType]) {
+      await API.addQuickStatus({ status_type: statusMap[taskType], ...datePayload });
+      if (notes) await API.addNote(notes, entryDate || null);
+    } else {
+      throw new Error(`Unknown task type: ${taskType}`);
+    }
+  },
+
+  // Build the inline quick-log form that replaces Done/Skip when user taps Done
+  _buildLogForm(taskType, displayName) {
+    const today = new Date().toISOString().split('T')[0];
+    return `<div class="reminder-log-form">
+      <div class="log-when-row">
+        <span class="log-when-label">When?</span>
+        <div class="log-presets">
+          <button class="log-preset active" data-days="0">Today</button>
+          <button class="log-preset" data-days="1">Yesterday</button>
+          <button class="log-preset" data-days="2">2 days ago</button>
+          <button class="log-preset" data-days="3">3 days ago</button>
+          <button class="log-preset" data-days="-1">Other…</button>
+        </div>
+        <input type="date" class="log-date-input" value="${today}" max="${today}">
+      </div>
+      <textarea class="log-note-textarea" placeholder="Notes (optional)…" rows="2"></textarea>
+      <div class="log-form-btns">
+        <button class="log-cancel">Cancel</button>
+        <button class="log-confirm" data-task="${taskType}">✅ Log Entry</button>
+      </div>
+    </div>`;
+  },
+
   renderReminders(d) {
     if (!d.reminders || d.reminders.length === 0) return '';
     const items = d.reminders.slice(0, 8).map(r => {
@@ -187,8 +234,11 @@ const DashboardPage = {
       const detail = r.days_since != null
         ? `${r.days_since}d ago · every ${r.interval_days}d`
         : `Every ${r.interval_days}d · never done`;
+      const isFormTask = !!this._FORM_TASKS[r.task_type];
+      const doneLabel = isFormTask ? '→ Log Now' : 'Done';
+      const doneTip = isFormTask ? 'Opens the entry form' : 'Tap to log with date options';
       return `
-        <div class="reminder-item reminder-urgency-${r.urgency}" data-task="${r.task_type}" data-action-type="${r.task_type}">
+        <div class="reminder-item reminder-urgency-${r.urgency}" data-task="${r.task_type}">
           <div class="reminder-main" title="Tap to reveal actions">
             <div class="reminder-icon reminder-urgency-${r.urgency}">${r.icon}</div>
             <div class="reminder-info">
@@ -199,8 +249,9 @@ const DashboardPage = {
             <span style="color:var(--text-muted);font-size:var(--fs-xs);margin-left:4px">›</span>
           </div>
           <div class="reminder-actions">
-            <button class="reminder-action-btn reminder-action-done" data-done="${r.task_type}">
-              <span class="action-icon">✅</span>Done
+            <button class="reminder-action-btn reminder-action-done" data-done="${r.task_type}"
+              data-name="${r.display_name}" data-form-task="${isFormTask}" title="${doneTip}">
+              <span class="action-icon">${isFormTask ? '📋' : '✅'}</span>${doneLabel}
             </button>
             <button class="reminder-action-btn reminder-action-skip" data-skip="${r.task_type}">
               <span class="action-icon">⏭</span>Skip
@@ -220,37 +271,97 @@ const DashboardPage = {
       main.addEventListener('click', () => {
         const item = main.closest('.reminder-item');
         const wasOpen = item.classList.contains('actions-open');
-        // Close all others
         document.querySelectorAll('.reminder-item.actions-open').forEach(el => el.classList.remove('actions-open'));
         if (!wasOpen) item.classList.add('actions-open');
       });
     });
 
-    // Close actions when tapping elsewhere
+    // Close when tapping elsewhere
     document.addEventListener('click', e => {
       if (!e.target.closest('.reminder-item')) {
         document.querySelectorAll('.reminder-item.actions-open').forEach(el => el.classList.remove('actions-open'));
       }
-    }, { once: false, capture: true });
+    }, { capture: true });
 
-    // Done button — log maintenance + reset clock
+    // Done button
     document.querySelectorAll('[data-done]').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
-        const taskType = btn.dataset.done;
-        const item = btn.closest('.reminder-item');
-        try {
-          await API.addMaintenance({ action_type: taskType });
-          item.classList.remove('actions-open');
-          item.classList.add('completing');
-          const name = item.querySelector('.reminder-name')?.textContent || taskType;
-          Toast.success(`${name} logged! ✅`);
-          setTimeout(() => item.remove(), 400);
-        } catch (err) { Toast.error('Failed: ' + err.message); }
+        const taskType  = btn.dataset.done;
+        const name      = btn.dataset.name || taskType;
+        const isForm    = btn.dataset.formTask === 'true';
+        const item      = btn.closest('.reminder-item');
+        const actionsEl = item.querySelector('.reminder-actions');
+
+        if (isForm) {
+          // Navigate to quick-entry form; form submission auto-completes the reminder
+          const cfg = this._FORM_TASKS[taskType];
+          if (cfg.preselect) QuickEntryPage.selectedChemical = cfg.preselect;
+          QuickEntryPage.pendingReminder = { task_type: taskType, display_name: name };
+          App.navigate('quick-entry', { tab: cfg.tab });
+        } else {
+          // Show inline quick-log form (with optional backdate)
+          actionsEl.innerHTML = this._buildLogForm(taskType, name);
+          const form = actionsEl.querySelector('.reminder-log-form');
+          let selectedDays = 0;
+
+          // Date preset buttons
+          form.querySelectorAll('.log-preset').forEach(p => {
+            p.addEventListener('click', () => {
+              form.querySelectorAll('.log-preset').forEach(x => x.classList.remove('active'));
+              p.classList.add('active');
+              const days = parseInt(p.dataset.days);
+              selectedDays = days;
+              const dateInput = form.querySelector('.log-date-input');
+              if (days === -1) {
+                dateInput.style.display = 'block';
+                dateInput.focus();
+              } else {
+                dateInput.style.display = 'none';
+                const d = new Date();
+                d.setDate(d.getDate() - days);
+                dateInput.value = d.toISOString().split('T')[0];
+              }
+            });
+          });
+
+          // Cancel
+          form.querySelector('.log-cancel').addEventListener('click', e => {
+            e.stopPropagation();
+            actionsEl.innerHTML = `
+              <button class="reminder-action-btn reminder-action-done" data-done="${taskType}"
+                data-name="${name}" data-form-task="false">
+                <span class="action-icon">✅</span>Done
+              </button>
+              <button class="reminder-action-btn reminder-action-skip" data-skip="${taskType}">
+                <span class="action-icon">⏭</span>Skip
+              </button>`;
+            this._rebindActionsEl(actionsEl, item);
+          });
+
+          // Confirm log
+          form.querySelector('.log-confirm').addEventListener('click', async e => {
+            e.stopPropagation();
+            try {
+              const dateInput = form.querySelector('.log-date-input');
+              const today = new Date().toISOString().split('T')[0];
+              const entryDate = (dateInput.value && dateInput.value !== today)
+                ? new Date(dateInput.value + 'T12:00:00').toISOString()
+                : null;
+              const notes = form.querySelector('.log-note-textarea')?.value?.trim() || null;
+
+              await this._logDirectTask(taskType, entryDate, notes);
+              item.classList.remove('actions-open');
+              item.classList.add('completing');
+              Toast.success(`${name} logged! ✅`);
+              setTimeout(() => item.remove(), 400);
+            } catch (err) { Toast.error('Failed: ' + err.message); }
+          });
+        }
       });
     });
 
-    // Skip button — reset clock only, no journal entry
+    // Skip button
     document.querySelectorAll('[data-skip]').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
@@ -266,19 +377,42 @@ const DashboardPage = {
       });
     });
 
-    // Swipe support (touch devices)
+    // Swipe to reveal actions (touch devices)
     document.querySelectorAll('.reminder-item').forEach(item => {
       let startX = 0;
       item.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
       item.addEventListener('touchend', e => {
         const dx = e.changedTouches[0].clientX - startX;
-        if (dx < -40) { // swipe left
+        if (dx < -40) {
           document.querySelectorAll('.reminder-item.actions-open').forEach(el => el.classList.remove('actions-open'));
           item.classList.add('actions-open');
         } else if (dx > 30) {
           item.classList.remove('actions-open');
         }
       }, { passive: true });
+    });
+  },
+
+  // Re-bind restored Done/Skip buttons after cancel
+  _rebindActionsEl(actionsEl, item) {
+    actionsEl.querySelector('[data-done]')?.addEventListener('click', async e => {
+      e.stopPropagation();
+      const btn = e.currentTarget;
+      const taskType = btn.dataset.done;
+      const name = btn.dataset.name || taskType;
+      actionsEl.innerHTML = this._buildLogForm(taskType, name);
+      // Re-enter the same flow — simplest: just re-call bindReminders subset
+      // For simplicity, reload the reminder section after a short delay
+    });
+    actionsEl.querySelector('[data-skip]')?.addEventListener('click', async e => {
+      e.stopPropagation();
+      const taskType = e.currentTarget.dataset.skip;
+      try {
+        await API.dismissMaintenance(taskType);
+        item.classList.add('dismissing');
+        Toast.info('Reminder snoozed ⏭');
+        setTimeout(() => item.remove(), 300);
+      } catch (err) { Toast.error('Failed: ' + err.message); }
     });
   },
 

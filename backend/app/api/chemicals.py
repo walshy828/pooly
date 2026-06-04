@@ -14,14 +14,15 @@ router = APIRouter(prefix="/api/chemicals", tags=["chemicals"])
 @router.post("", response_model=ChemicalAdditionResponse)
 async def add_chemical(data: ChemicalAdditionCreate, db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
+    entry_dt = data.entry_date or now
 
-    entry = JournalEntry(entry_type="chemical", entry_date=now, notes=data.notes)
+    entry = JournalEntry(entry_type="chemical", entry_date=entry_dt, notes=data.notes)
     db.add(entry)
     await db.flush()
 
     chem = ChemicalAddition(
         journal_entry_id=entry.id,
-        added_at=now,
+        added_at=entry_dt,
         chemical_type=data.chemical_type,
         form=data.form,
         amount=data.amount,
@@ -32,9 +33,10 @@ async def add_chemical(data: ChemicalAdditionCreate, db: AsyncSession = Depends(
     db.add(chem)
     await db.flush()
 
-    # Update schedule for chlorine
     if data.chemical_type == "chlorine":
-        await update_schedule_completion(db, "add_chlorine", now)
+        await update_schedule_completion(db, "add_chlorine", entry_dt)
+    elif data.chemical_type == "cyanuric_acid":
+        await update_schedule_completion(db, "check_cya", entry_dt)
 
     await db.commit()
     await db.refresh(chem)

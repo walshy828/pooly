@@ -15,16 +15,15 @@ router = APIRouter(prefix="/api/measurements", tags=["measurements"])
 @router.post("", response_model=MeasurementResponse)
 async def add_measurement(data: MeasurementCreate, db: AsyncSession = Depends(get_db)):
     now = datetime.now(timezone.utc)
+    entry_dt = data.entry_date or now
 
-    # Create parent journal entry
-    entry = JournalEntry(entry_type="measurement", entry_date=now, notes=data.notes)
+    entry = JournalEntry(entry_type="measurement", entry_date=entry_dt, notes=data.notes)
     db.add(entry)
     await db.flush()
 
-    # Create measurement record
     meas = Measurement(
         journal_entry_id=entry.id,
-        measured_at=now,
+        measured_at=entry_dt,
         ph=data.ph,
         free_chlorine=data.free_chlorine,
         total_chlorine=data.total_chlorine,
@@ -38,10 +37,9 @@ async def add_measurement(data: MeasurementCreate, db: AsyncSession = Depends(ge
     db.add(meas)
     await db.flush()
 
-    # Update maintenance schedule
-    await update_schedule_completion(db, "test_water", now)
+    await update_schedule_completion(db, "test_water", entry_dt)
     if data.cyanuric_acid is not None:
-        await update_schedule_completion(db, "check_cya", now)
+        await update_schedule_completion(db, "check_cya", entry_dt)
 
     await db.commit()
     await db.refresh(meas)

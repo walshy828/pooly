@@ -103,6 +103,57 @@
   color: var(--color-success); letter-spacing: 0.2px;
 }
 
+/* Pending reminder banner — shown when navigated from a dashboard reminder */
+.pending-reminder-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(32, 178, 170, 0.12);
+  border: 1px solid rgba(32, 178, 170, 0.35);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.pending-reminder-banner .pr-icon { font-size: 1rem; flex-shrink: 0; }
+.pending-reminder-banner .pr-text { flex: 1; }
+.pending-reminder-banner .pr-dismiss {
+  background: none; border: none; color: var(--text-muted);
+  font-size: var(--fs-md); cursor: pointer; padding: 0 var(--space-xs);
+  line-height: 1;
+}
+
+/* Entry date selector — compact row at top of each panel */
+.entry-date-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-xl);
+  cursor: pointer;
+  position: relative;
+}
+.entry-date-icon { font-size: 1rem; flex-shrink: 0; }
+.entry-date-display {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  font-weight: var(--fw-medium);
+}
+.entry-date-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* prevents iOS zoom */
+}
+
 /* Entry notes section (inline with test/chem; standalone save for maint/status) */
 .entry-notes-section {
   margin-top: var(--space-lg);

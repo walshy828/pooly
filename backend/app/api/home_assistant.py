@@ -34,8 +34,16 @@ class SensorPushRequest(BaseModel):
     entity_id: Optional[str] = None
 
 
-# ── How each task_type maps to a journal record when marked complete ──────────
+# ── Task completion routing ────────────────────────────────────────────────────
 
+# Tasks that auto-complete via Pooly app journal entries only.
+# Logging a measurement completes test_water/check_cya.
+# Logging a chlorine addition completes add_chlorine.
+# Logging a shock entry completes shock_pool.
+# The HA endpoint rejects complete requests for these with a 405.
+_POOLY_APP_ONLY_TASKS = {"test_water", "add_chlorine", "check_cya", "shock_pool"}
+
+# Physical tasks HA can complete directly → journal record type
 _COMPLETE_MAP = {
     "clean_cartridge": {"type": "maintenance", "action_type": "clean_cartridge"},
     "add_water":       {"type": "maintenance", "action_type": "add_water"},
@@ -45,7 +53,6 @@ _COMPLETE_MAP = {
     "robot_run":       {"type": "quick_status", "status_type": "robot_run"},
     "vacuum":          {"type": "quick_status", "status_type": "vacuumed"},
     "empty_basket":    {"type": "quick_status", "status_type": "basket_emptied"},
-    # test_water / add_chlorine / check_cya / shock_pool → note entry only
 }
 
 _HEALTH_LABELS = {
@@ -198,12 +205,15 @@ async def ha_complete_task(
     body: Optional[CompleteTaskRequest] = Body(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark a maintenance task as complete from Home Assistant.
+    """Mark a physical maintenance task as complete from Home Assistant.
 
     Creates an appropriate journal entry and advances the schedule:
     - Action tasks (clean_cartridge, backwash, etc.) → MaintenanceAction record
     - Status tasks (clean_skimmer, robot_run, etc.) → QuickStatus record
-    - Chemistry/chemical tasks (test_water, add_chlorine, etc.) → note entry
+
+    Chemistry/chemical tasks (test_water, add_chlorine, check_cya, shock_pool) are
+    intentionally blocked here — they auto-complete when a matching journal entry is
+    saved in the Pooly app (e.g. logging a water test measurement marks test_water done).
     """
     now = datetime.now(timezone.utc)
 
@@ -213,6 +223,16 @@ async def ha_complete_task(
     sched = result.scalar_one_or_none()
     if not sched:
         raise HTTPException(status_code=404, detail=f"Task '{task_type}' not found")
+
+    if task_type in _POOLY_APP_ONLY_TASKS:
+        raise HTTPException(
+            status_code=405,
+            detail=(
+                f"'{sched.display_name}' must be completed by logging a journal entry in "
+                f"the Pooly app. It will automatically be marked done when you save the "
+                f"relevant entry (water test, chemical addition, or shock)."
+            ),
+        )
 
     notes_text = body.notes if body and body.notes else None
     ha_note = f"Completed via Home Assistant{': ' + notes_text if notes_text else ''}"
@@ -235,10 +255,6 @@ async def ha_complete_task(
             journal_entry_id=entry.id, logged_at=now,
             status_type=action_cfg["status_type"],
         ))
-        await db.flush()
-    else:
-        entry = JournalEntry(entry_type="note", entry_date=now, notes=ha_note)
-        db.add(entry)
         await db.flush()
 
     await update_schedule_completion(db, task_type, now)

@@ -11,19 +11,22 @@ const QuickEntryPage = {
   healthScore: 7,
   completedStatuses: new Set(),
   panelNotes: {},
+  entryDate: null,        // null = now; ISO string = backdated
+  pendingReminder: null,  // { task_type, display_name } when navigated from a reminder
 
   tabs: [
-    { id: 'test',   label: '🔬 Water Test',   name: 'Water Test' },
-    { id: 'chem',   label: '💧 Chemicals',     name: 'Chemicals' },
-    { id: 'maint',  label: '🔧 Pool Care',     name: 'Pool Care' },
-    { id: 'status', label: '✅ Quick Check',   name: 'Quick Check' },
-    { id: 'note',   label: '📝 Note',          name: 'Note' },
+    { id: 'test',   label: '🔬 Water Test',  name: 'Water Test' },
+    { id: 'chem',   label: '💧 Chemicals',   name: 'Chemicals' },
+    { id: 'maint',  label: '🔧 Pool Care',   name: 'Pool Care' },
+    { id: 'status', label: '✅ Quick Check', name: 'Quick Check' },
+    { id: 'note',   label: '📝 Note',        name: 'Note' },
   ],
 
   async render(container) {
     this.measurementValues = {};
     this.completedStatuses = new Set();
     this.panelNotes = {};
+    this.entryDate = null;
     this.poolStatus = 'open';
 
     try {
@@ -55,8 +58,9 @@ const QuickEntryPage = {
     document.getElementById('entryTabs').addEventListener('click', e => {
       const tab = e.target.closest('[data-tab]');
       if (tab && !tab.disabled) {
-        this.captureNotes();
+        this.captureState();
         this.activeTab = tab.dataset.tab;
+        this.entryDate = null;  // reset date when switching tabs
         history.replaceState(null, '', `#quick-entry/${tab.dataset.tab}`);
         this.renderPanel();
         this.updateTabs();
@@ -74,9 +78,7 @@ const QuickEntryPage = {
     document.querySelectorAll('#entryTabs .tab-item').forEach(btn => {
       const isActive = btn.dataset.tab === this.activeTab;
       btn.classList.toggle('active', isActive);
-      if (isActive) {
-        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }
+      if (isActive) btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     });
   },
 
@@ -92,9 +94,71 @@ const QuickEntryPage = {
     }
   },
 
-  captureNotes() {
-    const el = document.getElementById('panelNoteText');
-    if (el) this.panelNotes[this.activeTab] = el.value;
+  captureState() {
+    const noteEl = document.getElementById('panelNoteText');
+    if (noteEl) this.panelNotes[this.activeTab] = noteEl.value;
+    const dateEl = document.getElementById('entryDateInput');
+    if (dateEl) this.entryDate = this._dateInputToISO(dateEl.value);
+  },
+
+  _todayStr() {
+    return new Date().toISOString().split('T')[0];
+  },
+
+  _dateInputToISO(dateStr) {
+    if (!dateStr) return null;
+    const today = this._todayStr();
+    if (dateStr === today) return null;  // null → backend uses now
+    const d = new Date(dateStr + 'T12:00:00');
+    return isNaN(d) ? null : d.toISOString();
+  },
+
+  renderPendingReminderBanner() {
+    if (!this.pendingReminder) return '';
+    return `<div class="pending-reminder-banner" id="pendingReminderBanner">
+      <span class="pr-icon">📋</span>
+      <span class="pr-text">Completing: <strong>${this.pendingReminder.display_name}</strong></span>
+      <button class="pr-dismiss" id="dismissReminderBanner">✕</button>
+    </div>`;
+  },
+
+  bindPendingReminderBanner() {
+    document.getElementById('dismissReminderBanner')?.addEventListener('click', () => {
+      this.pendingReminder = null;
+      document.getElementById('pendingReminderBanner')?.remove();
+    });
+  },
+
+  renderDateSelector() {
+    const today = this._todayStr();
+    const selectedDate = this.entryDate ? new Date(this.entryDate).toISOString().split('T')[0] : today;
+    const isToday = selectedDate === today;
+    const displayText = isToday ? 'Today' : Fmt.shortDate ? Fmt.shortDate(selectedDate) : selectedDate;
+    return `<div class="entry-date-row" id="entryDateRow">
+      <span class="entry-date-icon">📅</span>
+      <span class="entry-date-display" id="entryDateDisplay">${displayText}</span>
+      <input type="date" class="entry-date-input" id="entryDateInput"
+        value="${selectedDate}" max="${today}">
+    </div>`;
+  },
+
+  bindDateSelector() {
+    const input = document.getElementById('entryDateInput');
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const today = this._todayStr();
+      const display = document.getElementById('entryDateDisplay');
+      if (input.value === today) {
+        this.entryDate = null;
+        if (display) display.textContent = 'Today';
+      } else {
+        this.entryDate = this._dateInputToISO(input.value);
+        if (display) {
+          const d = new Date(input.value + 'T12:00:00');
+          if (display) display.textContent = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        }
+      }
+    });
   },
 
   renderNotesSection(tab) {
@@ -108,7 +172,9 @@ const QuickEntryPage = {
 
   // ── TEST PANEL ──────────────────────────────────────────────
   renderTestPanel() {
-    let html = this.renderHealthSlider();
+    let html = this.renderPendingReminderBanner();
+    html += this.renderDateSelector();
+    html += this.renderHealthSlider();
     const params = ['total_chlorine', 'free_chlorine', 'bromine', 'alkalinity', 'cyanuric_acid', 'ph'];
     params.forEach(param => { html += this.renderMeasurementGroup(param); });
     html += this.renderNotesSection('test');
@@ -142,11 +208,10 @@ const QuickEntryPage = {
       return `<button class="meas-chip${sel}" data-param="${param}" data-value="${val}" style="background:${bg};--chip-glow:${bg}">${val}</button>`;
     }).join('');
     const selDisplay = selected != null ? `Selected: ${selected}${spec.unit ? ' ' + spec.unit : ''}` : '';
-    const idealBar = this.renderIdealRangeBar(spec);
     return `<div class="measurement-group">
       <div class="measurement-label">${spec.label} <span class="measurement-unit">${spec.unit}</span></div>
       <div class="measurement-chips">${chips}</div>
-      ${idealBar}
+      ${this.renderIdealRangeBar(spec)}
       <div class="selected-value-display" id="sel-${param}">${selDisplay}</div>
     </div>`;
   },
@@ -158,10 +223,8 @@ const QuickEntryPage = {
     let idealEndIdx = -1;
     spec.options.forEach((v, i) => { if (v <= spec.idealHigh) idealEndIdx = i; });
     if (idealStartIdx < 0 || idealEndIdx < 0 || idealEndIdx < idealStartIdx) return '';
-
     const leftPct  = (idealStartIdx / n * 100).toFixed(1);
     const widthPct = ((idealEndIdx - idealStartIdx + 1) / n * 100).toFixed(1);
-
     return `<div class="ideal-range-bar">
       <div class="ideal-range-fill" style="left:${leftPct}%;width:${widthPct}%"></div>
       <div class="ideal-range-label">
@@ -171,6 +234,9 @@ const QuickEntryPage = {
   },
 
   bindTestPanel() {
+    this.bindDateSelector();
+    this.bindPendingReminderBanner();
+
     document.querySelectorAll('.meas-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const param = chip.dataset.param;
@@ -181,7 +247,8 @@ const QuickEntryPage = {
         if (this.measurementValues[param] != null) chip.classList.add('selected');
         const spec = Chemistry.ranges[param];
         const el = document.getElementById(`sel-${param}`);
-        if (el) el.textContent = this.measurementValues[param] != null ? `Selected: ${this.measurementValues[param]}${spec.unit ? ' ' + spec.unit : ''}` : '';
+        if (el) el.textContent = this.measurementValues[param] != null
+          ? `Selected: ${this.measurementValues[param]}${spec.unit ? ' ' + spec.unit : ''}` : '';
       });
     });
 
@@ -200,15 +267,34 @@ const QuickEntryPage = {
   async submitMeasurement() {
     try {
       const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
+      const entryDate = this.entryDate;
       const hasValues = Object.keys(this.measurementValues).length > 0;
       if (hasValues) {
-        await API.addMeasurement({ ...this.measurementValues, ...(notes ? { notes } : {}) });
+        await API.addMeasurement({
+          ...this.measurementValues,
+          ...(notes ? { notes } : {}),
+          ...(entryDate ? { entry_date: entryDate } : {}),
+        });
       }
-      await API.addObservation({ health_score: this.healthScore, ...(notes ? { notes } : {}) });
-      Toast.success('Reading saved! 🎉');
+      await API.addObservation({
+        health_score: this.healthScore,
+        ...(notes ? { notes } : {}),
+        ...(entryDate ? { entry_date: entryDate } : {}),
+      });
+
+      const reminderName = this.pendingReminder?.display_name;
+      this.pendingReminder = null;
       this.measurementValues = {};
       this.panelNotes.test = '';
-      this.renderPanel();
+      this.entryDate = null;
+
+      if (reminderName) {
+        Toast.success(`${reminderName} logged! ✅`);
+        App.navigate('dashboard');
+      } else {
+        Toast.success('Reading saved! 🎉');
+        this.renderPanel();
+      }
     } catch (err) { Toast.error('Failed to save: ' + err.message); }
   },
 
@@ -265,17 +351,22 @@ const QuickEntryPage = {
       </div></div>
       <button class="btn btn-secondary btn-block" id="submitShock">⚡ Log Shock</button>`;
 
-    return `<div class="section-title">Add Chemicals</div>
+    const banner = this.renderPendingReminderBanner();
+    const dateRow = this.renderDateSelector();
+    return `${banner}${dateRow}
+      <div class="section-title">Add Chemicals</div>
       <div class="chemical-type-grid">${types}</div>
-      ${formHtml}
-      ${submitBtn}
+      ${formHtml}${submitBtn}
       ${shockHtml}`;
   },
 
   bindChemPanel() {
+    this.bindDateSelector();
+    this.bindPendingReminderBanner();
+
     document.querySelectorAll('.chem-type-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.captureNotes();
+        this.captureState();
         this.selectedChemical = btn.dataset.chem;
         this.chemAmount = 1;
         this.renderPanel();
@@ -284,7 +375,7 @@ const QuickEntryPage = {
 
     document.querySelectorAll('.toggle-btn[data-form]').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.captureNotes();
+        this.captureState();
         this.chemForm = btn.dataset.form;
         this.chemUnit = this.chemForm === 'tabs' ? '3" tabs' : 'oz';
         this.chemAmount = 1;
@@ -294,14 +385,17 @@ const QuickEntryPage = {
 
     document.querySelectorAll('.toggle-btn[data-shock]').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.captureNotes();
+        this.captureState();
         this.shockType = btn.dataset.shock;
         this.renderPanel();
       });
     });
 
-    this.bindStepper('chemMinus', 'chemPlus', 'chemAmountDisplay', v => this.chemAmount = v, () => this.chemAmount, this.selectedChemical === 'chlorine' && this.chemForm === 'tabs' ? 1 : 0.5);
-    this.bindStepper('shockMinus', 'shockPlus', 'shockAmountDisplay', v => this.shockUnits = v, () => this.shockUnits, 1);
+    this.bindStepper('chemMinus', 'chemPlus', 'chemAmountDisplay',
+      v => this.chemAmount = v, () => this.chemAmount,
+      this.selectedChemical === 'chlorine' && this.chemForm === 'tabs' ? 1 : 0.5);
+    this.bindStepper('shockMinus', 'shockPlus', 'shockAmountDisplay',
+      v => this.shockUnits = v, () => this.shockUnits, 1);
 
     document.getElementById('submitChem')?.addEventListener('click', () => this.submitChemical());
     document.getElementById('submitShock')?.addEventListener('click', () => this.submitShock());
@@ -326,6 +420,7 @@ const QuickEntryPage = {
     if (!this.selectedChemical) return;
     try {
       const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
+      const entryDate = this.entryDate;
       const unit = this.selectedChemical === 'chlorine'
         ? (this.chemForm === 'tabs' ? '3" tabs' : 'oz')
         : (document.getElementById('chemUnitSelect')?.value || 'oz');
@@ -335,21 +430,48 @@ const QuickEntryPage = {
         amount: this.chemAmount,
         unit,
         ...(notes ? { notes } : {}),
+        ...(entryDate ? { entry_date: entryDate } : {}),
       });
-      Toast.success(`${Fmt.chemicalLabel(this.selectedChemical)} logged! 💧`);
+
+      const reminderName = this.pendingReminder?.display_name;
+      const chemLabel = Fmt.chemicalLabel(this.selectedChemical);
+      this.pendingReminder = null;
       this.selectedChemical = null;
       this.chemAmount = 1;
       this.panelNotes.chem = '';
-      this.renderPanel();
+      this.entryDate = null;
+
+      if (reminderName) {
+        Toast.success(`${reminderName} logged! ✅`);
+        App.navigate('dashboard');
+      } else {
+        Toast.success(`${chemLabel} logged! 💧`);
+        this.renderPanel();
+      }
     } catch (err) { Toast.error('Failed: ' + err.message); }
   },
 
   async submitShock() {
     try {
-      await API.addShock({ shock_type: this.shockType, units: this.shockUnits });
-      Toast.success('Pool shock logged! ⚡');
+      const entryDate = this.entryDate;
+      await API.addShock({
+        shock_type: this.shockType,
+        units: this.shockUnits,
+        ...(entryDate ? { entry_date: entryDate } : {}),
+      });
+
+      const reminderName = this.pendingReminder?.display_name;
+      this.pendingReminder = null;
       this.shockUnits = 1;
-      this.renderPanel();
+      this.entryDate = null;
+
+      if (reminderName) {
+        Toast.success(`${reminderName} logged! ✅`);
+        App.navigate('dashboard');
+      } else {
+        Toast.success('Pool shock logged! ⚡');
+        this.renderPanel();
+      }
     } catch (err) { Toast.error('Failed: ' + err.message); }
   },
 
@@ -363,7 +485,9 @@ const QuickEntryPage = {
     ];
     const btns = actions.map(a => `<button class="quick-status-btn" data-action="${a.type}">
       <span class="qs-icon">${a.icon}</span><span class="qs-label">${a.label}</span></button>`).join('');
-    return `<div class="section-title">Log Pool Care</div>
+    return `${this.renderPendingReminderBanner()}
+      ${this.renderDateSelector()}
+      <div class="section-title">Log Pool Care</div>
       <div class="quick-status-grid">${btns}</div>
       <div class="entry-notes-divider"></div>
       ${this.renderNotesSection('maint')}
@@ -371,10 +495,17 @@ const QuickEntryPage = {
   },
 
   bindMaintPanel() {
+    this.bindDateSelector();
+    this.bindPendingReminderBanner();
+
     document.querySelectorAll('.quick-status-btn[data-action]').forEach(btn => {
       btn.addEventListener('click', async () => {
         try {
-          await API.addMaintenance({ action_type: btn.dataset.action });
+          const entryDate = this.entryDate;
+          await API.addMaintenance({
+            action_type: btn.dataset.action,
+            ...(entryDate ? { entry_date: entryDate } : {}),
+          });
           btn.classList.add('qs-done');
           Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
         } catch (err) { Toast.error('Failed: ' + err.message); }
@@ -385,7 +516,8 @@ const QuickEntryPage = {
       const text = document.getElementById('panelNoteText')?.value?.trim();
       if (!text) { Toast.info('Enter a note first'); return; }
       try {
-        await API.addNote(text);
+        const entryDate = this.entryDate;
+        await API.addNote(text, entryDate);
         Toast.success('Note saved! 📝');
         document.getElementById('panelNoteText').value = '';
         this.panelNotes.maint = '';
@@ -400,7 +532,8 @@ const QuickEntryPage = {
       return `<button class="quick-status-btn${done}" data-status="${s.type}">
         <span class="qs-icon">${s.icon}</span><span class="qs-label">${s.label}</span></button>`;
     }).join('');
-    return `<div class="section-title">Quick Check</div>
+    return `${this.renderDateSelector()}
+      <div class="section-title">Quick Check</div>
       <div class="quick-status-grid">${btns}</div>
       <div class="entry-notes-divider"></div>
       ${this.renderNotesSection('status')}
@@ -408,10 +541,16 @@ const QuickEntryPage = {
   },
 
   bindStatusPanel() {
+    this.bindDateSelector();
+
     document.querySelectorAll('.quick-status-btn[data-status]').forEach(btn => {
       btn.addEventListener('click', async () => {
         try {
-          await API.addQuickStatus({ status_type: btn.dataset.status });
+          const entryDate = this.entryDate;
+          await API.addQuickStatus({
+            status_type: btn.dataset.status,
+            ...(entryDate ? { entry_date: entryDate } : {}),
+          });
           this.completedStatuses.add(btn.dataset.status);
           btn.classList.add('qs-done');
           Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
@@ -423,7 +562,8 @@ const QuickEntryPage = {
       const text = document.getElementById('panelNoteText')?.value?.trim();
       if (!text) { Toast.info('Enter a note first'); return; }
       try {
-        await API.addNote(text);
+        const entryDate = this.entryDate;
+        await API.addNote(text, entryDate);
         Toast.success('Note saved! 📝');
         document.getElementById('panelNoteText').value = '';
         this.panelNotes.status = '';
@@ -433,7 +573,8 @@ const QuickEntryPage = {
 
   // ── NOTE PANEL ──────────────────────────────────────────────
   renderNotePanel() {
-    return `<div class="section-title">Quick Note</div>
+    return `${this.renderDateSelector()}
+      <div class="section-title">Quick Note</div>
       <div class="form-group">
         <textarea class="form-textarea" id="noteText" placeholder="What's going on with the pool?" rows="6"></textarea>
       </div>
@@ -441,13 +582,17 @@ const QuickEntryPage = {
   },
 
   bindNotePanel() {
+    this.bindDateSelector();
+
     document.getElementById('submitNote')?.addEventListener('click', async () => {
       const text = document.getElementById('noteText')?.value?.trim();
       if (!text) { Toast.info('Please enter a note'); return; }
       try {
-        await API.addNote(text);
+        await API.addNote(text, this.entryDate);
         Toast.success('Note saved! 📝');
         document.getElementById('noteText').value = '';
+        this.entryDate = null;
+        this.renderPanel();
       } catch (err) { Toast.error('Failed: ' + err.message); }
     });
   },
