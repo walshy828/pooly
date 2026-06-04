@@ -287,6 +287,10 @@ async def ha_push_sensor(body: SensorPushRequest, db: AsyncSession = Depends(get
     Stores pool temperature, pump state, or pump energy data so it appears
     on the Pooly dashboard. Call this from a HA automation whenever the
     relevant entity state changes.
+
+    Deduplication: pump_state and pool_temp pushes that match the most recent
+    stored value are silently skipped (returns status=unchanged) to prevent
+    duplicate rows on HA restarts or config reloads.
     """
     valid_types = {"pool_temp", "pump_state", "pump_energy"}
     if body.sensor_type not in valid_types:
@@ -296,6 +300,27 @@ async def ha_push_sensor(body: SensorPushRequest, db: AsyncSession = Depends(get
         )
 
     now = datetime.now(timezone.utc)
+
+    # Deduplication check for pump_state (exact) and pool_temp (within 0.5°F).
+    # pump_energy is always written — it's a cumulative meter value.
+    if body.sensor_type in ("pump_state", "pool_temp"):
+        last_result = await db.execute(
+            select(SensorReading)
+            .where(SensorReading.sensor_type == body.sensor_type)
+            .order_by(desc(SensorReading.read_at))
+            .limit(1)
+        )
+        last = last_result.scalar_one_or_none()
+        if last is not None:
+            threshold = 0.0 if body.sensor_type == "pump_state" else 0.5
+            if abs(last.value - body.value) <= threshold:
+                return {
+                    "sensor_type": body.sensor_type,
+                    "value": body.value,
+                    "status": "unchanged",
+                    "read_at": last.read_at.isoformat(),
+                }
+
     db.add(SensorReading(
         sensor_type=body.sensor_type,
         value=body.value,

@@ -28,9 +28,18 @@ class Settings(BaseSettings):
     # Home Assistant
     HA_URL: Optional[str] = None
     HA_TOKEN: Optional[str] = None
+    # Set HA_PUSH_MODE=true when using the HACS integration to push sensor data.
+    # This disables the backend's scheduler from polling HA entity states,
+    # preventing duplicate sensor_readings rows. HA_URL + HA_TOKEN are still
+    # used for outbound notifications regardless of this flag.
+    HA_PUSH_MODE: bool = False
+    # Only needed when HA_PUSH_MODE=false (Pooly polls HA directly)
     HA_TEMP_ENTITY: Optional[str] = None
     HA_PUMP_ENTITY: Optional[str] = None
     HA_PUMP_ENERGY_ENTITY: Optional[str] = None
+
+    # How many days of sensor readings to retain (older rows are pruned nightly)
+    SENSOR_RETENTION_DAYS: int = 30
 
     # Weather
     WEATHER_API_KEY: Optional[str] = None
@@ -43,6 +52,15 @@ class Settings(BaseSettings):
     @property
     def ha_enabled(self) -> bool:
         return bool(self.HA_URL and self.HA_TOKEN)
+
+    @property
+    def ha_polling_enabled(self) -> bool:
+        """True only when pull-mode is active and all entity IDs are configured."""
+        return (
+            not self.HA_PUSH_MODE
+            and self.ha_enabled
+            and bool(self.HA_TEMP_ENTITY or self.HA_PUMP_ENTITY or self.HA_PUMP_ENERGY_ENTITY)
+        )
 
     @property
     def weather_enabled(self) -> bool:

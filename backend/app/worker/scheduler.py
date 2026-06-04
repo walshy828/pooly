@@ -1,8 +1,9 @@
 """Background worker — polls HA sensors, weather, and sends reminder notifications."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy import delete
 
 from app.database import async_session
 from app.models import SensorReading, WeatherSnapshot
@@ -13,8 +14,8 @@ from app.config import settings
 
 
 async def poll_sensors():
-    """Poll Home Assistant sensors and store readings."""
-    if not settings.ha_enabled:
+    """Poll Home Assistant sensors and store readings (pull mode only)."""
+    if not settings.ha_polling_enabled:
         return
 
     now = datetime.now(timezone.utc)
@@ -33,6 +34,31 @@ async def poll_sensors():
 
         await db.commit()
     print(f"[Worker] Sensors polled at {now.isoformat()}")
+
+
+async def prune_sensor_readings():
+    """Delete sensor readings older than SENSOR_RETENTION_DAYS, keeping the most recent per type."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.SENSOR_RETENTION_DAYS)
+    async with async_session() as db:
+        # Subquery: IDs of the most recent row per sensor_type (never delete these)
+        from sqlalchemy import select, func
+        latest_ids_result = await db.execute(
+            select(func.max(SensorReading.id)).group_by(SensorReading.sensor_type)
+        )
+        latest_ids = {row[0] for row in latest_ids_result.fetchall() if row[0] is not None}
+
+        if latest_ids:
+            stmt = delete(SensorReading).where(
+                SensorReading.read_at < cutoff,
+                SensorReading.id.not_in(latest_ids),
+            )
+        else:
+            stmt = delete(SensorReading).where(SensorReading.read_at < cutoff)
+
+        result = await db.execute(stmt)
+        await db.commit()
+        if result.rowcount:
+            print(f"[Worker] Pruned {result.rowcount} sensor readings older than {settings.SENSOR_RETENTION_DAYS} days")
 
 
 async def poll_weather():
@@ -91,9 +117,14 @@ async def main():
         await ensure_default_schedules(db)
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(poll_sensors, "interval", minutes=5, id="poll_sensors")
+    if settings.ha_polling_enabled:
+        scheduler.add_job(poll_sensors, "interval", minutes=5, id="poll_sensors")
+        print("[Worker] HA pull-mode enabled — sensor polling registered")
+    else:
+        print("[Worker] HA push-mode active — sensor polling disabled (HACS integration is the source)")
     scheduler.add_job(poll_weather, "interval", minutes=60, id="poll_weather")
     scheduler.add_job(check_reminders, "interval", hours=6, id="check_reminders")
+    scheduler.add_job(prune_sensor_readings, "cron", hour=3, minute=0, id="prune_sensors")
 
     scheduler.start()
     print("[Worker] Scheduler started")
