@@ -51,6 +51,7 @@ from app.api.chemicals import router as chemicals_router
 from app.api.maintenance import router as maintenance_router
 from app.api.sensors import router as sensors_router
 from app.api.settings import router as settings_router
+from app.api.home_assistant import router as ha_router
 
 app.include_router(dashboard_router)
 app.include_router(journal_router)
@@ -59,6 +60,7 @@ app.include_router(chemicals_router)
 app.include_router(maintenance_router)
 app.include_router(sensors_router)
 app.include_router(settings_router)
+app.include_router(ha_router)
 
 
 @app.get("/api/health")
