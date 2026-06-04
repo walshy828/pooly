@@ -9,7 +9,11 @@
   backdrop-filter: blur(20px);
 }
 
-.entry-panel { padding: var(--space-lg); }
+/* Bottom padding clears the nav bar + safe-area inset on notched phones */
+.entry-panel {
+  padding: var(--space-lg);
+  padding-bottom: calc(var(--nav-height) + var(--space-3xl) + env(safe-area-inset-bottom, 0px));
+}
 
 /* Health Slider */
 .health-slider-container { margin-bottom: var(--space-xl); }
@@ -177,8 +181,7 @@
 .quick-status-btn.qs-done { border-color: var(--color-success); background: var(--color-success-bg); }
 
 .submit-area {
-  padding: var(--space-lg) 0;
-  position: sticky; bottom: calc(var(--nav-height) + var(--space-md));
+  padding: var(--space-lg) 0 0;
 }
 
 /* Disabled tab (pool closed) */
