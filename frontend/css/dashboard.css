@@ -463,3 +463,329 @@
 .trend-dot {
   r: 3; fill: var(--bg-base); stroke-width: 2;
 }
+
+/* ── Status Hero ─────────────────────────────────────────────── */
+.status-hero {
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(32, 178, 170, 0.06) 100%);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-lg);
+  position: relative;
+  overflow: hidden;
+}
+.status-hero::before {
+  content: '';
+  position: absolute; top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle at center, var(--color-accent-glow) 0%, transparent 50%);
+  opacity: 0.2;
+  animation: shimmer 6s ease-in-out infinite;
+}
+.status-hero-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+  position: relative;
+  z-index: 1;
+}
+.hero-score-block { flex: 1; }
+.hero-score {
+  font-size: 3rem;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+.hero-score-denom {
+  font-size: 1.1rem;
+  font-weight: var(--fw-medium);
+  opacity: 0.6;
+}
+.hero-label {
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  margin-top: var(--space-xs);
+}
+.hero-age { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 2px; }
+
+.hero-test-badge {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.hero-test-fresh { color: var(--color-success); border-color: rgba(46, 204, 113, 0.3); }
+.hero-test-aging  { color: var(--color-warning); border-color: rgba(243, 156, 18, 0.3); }
+.hero-test-stale  { color: var(--color-danger);  border-color: rgba(231, 76, 60, 0.3); }
+
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  position: relative;
+  z-index: 1;
+}
+.hero-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+}
+.hero-chip-uv-warn   { color: var(--color-warning) !important; }
+.hero-chip-uv-danger { color: var(--color-danger)  !important; }
+
+/* ── Action Center ───────────────────────────────────────────── */
+.action-center { margin-bottom: var(--space-lg); }
+
+.all-good-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  background: var(--color-success-bg);
+  border: 1px solid rgba(46, 204, 113, 0.25);
+  border-radius: var(--radius-lg);
+}
+.all-good-icon { font-size: 1.8rem; flex-shrink: 0; }
+.all-good-title { font-weight: var(--fw-semibold); color: var(--color-success); font-size: var(--fs-sm); }
+.all-good-sub { font-size: var(--fs-xs); color: var(--text-secondary); margin-top: 2px; }
+
+.ac-chip {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: var(--fw-bold);
+  padding: 2px 7px; border-radius: 10px;
+}
+.ac-chip-critical { background: var(--color-danger-bg);  color: var(--color-danger); }
+.ac-chip-warning  { background: var(--color-warning-bg); color: var(--color-warning); }
+.ac-chip-info     { background: var(--color-info-bg);    color: var(--color-info); }
+
+.action-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+
+.action-item {
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid transparent;
+}
+.action-critical {
+  background: var(--color-danger-bg);
+  border-left-color: var(--color-danger);
+  border-color: rgba(231, 76, 60, 0.2);
+}
+.action-warning {
+  background: var(--color-warning-bg);
+  border-left-color: var(--color-warning);
+  border-color: rgba(243, 156, 18, 0.2);
+}
+.action-info { border-left-color: var(--color-info); }
+
+.action-item-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+.action-item-icon { font-size: 1rem; flex-shrink: 0; }
+.action-item-title { font-weight: var(--fw-semibold); font-size: var(--fs-sm); }
+.action-item-body {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding-left: 1.6rem;
+}
+
+/* ── Chemistry Panel ─────────────────────────────────────────── */
+.chemistry-panel { margin-bottom: var(--space-lg); }
+
+.section-meta {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-normal);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.chem-age-fresh  { color: var(--color-success); }
+.chem-age-aging  { color: var(--color-warning); }
+.chem-age-stale  { color: var(--color-danger); }
+
+.chem-rows-list { overflow: hidden; padding: 0; }
+
+.chem-row {
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+}
+.chem-row:last-child { border-bottom: none; }
+.chem-row:hover { background: var(--bg-elevated); }
+
+.chem-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xs);
+}
+.chem-row-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
+  flex: 1;
+}
+.chem-row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.chem-row-val {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+.chem-unit { font-size: var(--fs-xs); opacity: 0.65; }
+
+.chem-status-pill {
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  padding: 2px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+.chem-pill-ideal { background: var(--color-success-bg); color: var(--color-success); }
+.chem-pill-low   { background: var(--color-warning-bg); color: var(--color-warning); }
+.chem-pill-high  { background: var(--color-danger-bg);  color: var(--color-danger); }
+
+.chem-range-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding-top: var(--space-xs);
+}
+.param-range-bar {
+  flex: 1;
+  position: relative;
+  height: 8px;
+}
+.param-range-track {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-input);
+  border-radius: 4px;
+}
+.param-range-ideal {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: rgba(46, 204, 113, 0.2);
+  border: 1px solid rgba(46, 204, 113, 0.35);
+  border-radius: 2px;
+}
+.param-range-marker {
+  position: absolute;
+  top: -3px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  border: 2px solid var(--bg-base);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  transition: left var(--transition-slow);
+}
+.param-ideal-label {
+  font-size: 10px;
+  color: rgba(46, 204, 113, 0.7);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Trend direction arrows ──────────────────────────────────── */
+.trend-dir {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+}
+.trend-up     { color: var(--color-success); }
+.trend-down   { color: var(--color-warning); }
+.trend-stable { color: var(--text-muted); }
+
+/* ── Trends section header with toggle ──────────────────────── */
+.trends-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+.trend-toggle-group {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+}
+.trend-toggle-btn {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-family: var(--font-family);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.trend-toggle-btn.active {
+  background: var(--color-accent);
+  color: var(--text-on-accent);
+  box-shadow: 0 1px 4px rgba(32, 178, 170, 0.4);
+}
+
+/* ── Weather Insights ────────────────────────────────────────── */
+.weather-insights-section { margin-bottom: var(--space-lg); }
+
+.weather-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.w-stat { text-align: center; }
+.w-stat-val {
+  display: block;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  line-height: 1.1;
+}
+.w-stat-lbl {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.w-uv-warn   { color: var(--color-warning); }
+.w-uv-danger { color: var(--color-danger); }
+
+.weather-pool-impacts {
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.pool-impact-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.pool-impact-row.impact-warning .impact-text { color: var(--color-warning); }
+.pool-impact-row.impact-info    .impact-text { color: var(--text-secondary); }
+.impact-icon { flex-shrink: 0; font-size: 1rem; }

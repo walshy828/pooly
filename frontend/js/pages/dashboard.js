@@ -1,5 +1,9 @@
 /** Dashboard page renderer */
 const DashboardPage = {
+  trends: null,
+  _trendDays: 30,
+
+  // ── Lifecycle ─────────────────────────────────────────────────
   async render(container) {
     container.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div></div>`;
     try {
@@ -8,9 +12,10 @@ const DashboardPage = {
         API.getTrends(30).catch(() => ({}))
       ]);
       this.trends = trends;
+      this._trendDays = 30;
       container.innerHTML = this.buildHTML(data);
-      this.bindChemLegend();
       this.bindReminders();
+      this.bindTrendToggle();
     } catch (err) {
       container.innerHTML = `
         <div class="empty-state">
@@ -24,17 +29,17 @@ const DashboardPage = {
     return `
       <div class="dashboard container">
         ${d.pool_status === 'closed' ? this.renderClosedBanner(d) : ''}
-        ${this.renderHealthHero(d)}
-        ${this.renderSensors(d)}
-        ${this.renderChemistry(d)}
+        ${this.renderStatusHero(d)}
+        ${this.renderActionCenter(d)}
+        ${this.renderChemistryPanel(d)}
         ${this.renderTrends()}
-        ${this.renderRecommendations(d)}
+        ${this.renderWeatherInsights(d)}
         ${this.renderReminders(d)}
-        ${this.renderWeather(d)}
         ${this.renderRecent(d)}
       </div>`;
   },
 
+  // ── Pool Closed Banner ────────────────────────────────────────
   renderClosedBanner(d) {
     const closedDate = d.pool_closed_at ? Fmt.date(d.pool_closed_at) : 'recently';
     return `
@@ -47,135 +52,369 @@ const DashboardPage = {
       </div>`;
   },
 
-  renderHealthHero(d) {
-    const score = d.health_score || '--';
-    const label = d.health_label || 'No observation yet';
-    const pct = d.health_score ? d.health_score * 10 : 0;
-    const age = d.health_observed_at ? Fmt.timeAgo(d.health_observed_at) : '';
+  // ── Status Hero ───────────────────────────────────────────────
+  renderStatusHero(d) {
+    const score = d.health_score;
+    const pct = score ? score * 10 : 0;
+    const label = d.health_label || 'No observations yet';
+    const age = d.health_observed_at ? Fmt.timeAgo(d.health_observed_at) : null;
+
+    const testAge = d.chemistry_age_hours;
+    const testText = testAge == null ? 'Never tested'
+      : testAge < 1 ? 'Just tested'
+      : testAge < 24 ? `Tested ${Math.round(testAge)}h ago`
+      : `Tested ${Math.round(testAge / 24)}d ago`;
+    const testState = testAge == null ? 'stale'
+      : testAge < 24 ? 'fresh'
+      : testAge < 72 ? 'aging' : 'stale';
+
+    const scoreColor = !score ? 'var(--text-muted)'
+      : score >= 8 ? 'var(--color-success)'
+      : score >= 6 ? 'var(--color-warning)' : 'var(--color-danger)';
+
+    const s = d.sensors || {};
+    const chips = [];
+    if (s.pool_temp_f != null) {
+      chips.push(`<span class="hero-chip">🌡️ ${Fmt.temp(s.pool_temp_f)}</span>`);
+    }
+    if (s.pump_state != null) {
+      const on = s.pump_state === 'on';
+      chips.push(`<span class="hero-chip" style="color:${on ? 'var(--color-success)' : 'var(--text-muted)'}">⚙️ Pump ${on ? 'ON' : 'OFF'}</span>`);
+    }
+    if (d.weather?.air_temp_f != null) {
+      chips.push(`<span class="hero-chip">🌤️ ${Math.round(d.weather.air_temp_f)}°F outside</span>`);
+    }
+    if (d.weather?.uv_index != null) {
+      const uv = Math.round(d.weather.uv_index);
+      const uvLabel = uv >= 8 ? 'Very High' : uv >= 6 ? 'High' : uv >= 3 ? 'Moderate' : 'Low';
+      chips.push(`<span class="hero-chip hero-chip-uv-${uv >= 8 ? 'danger' : uv >= 6 ? 'warn' : 'ok'}">☀️ UV ${uv} — ${uvLabel}</span>`);
+    }
+
     return `
-      <div class="health-hero slide-up">
-        <div class="health-score-display">
-          <div class="health-score-number">${score === '--' ? '🏊' : score + '/10'}</div>
-          <div class="health-score-label">${label}</div>
-          <div class="health-bar"><div class="health-bar-fill" style="width:${pct}%"></div></div>
-          ${age ? `<div class="health-age">${age}</div>` : ''}
+      <div class="status-hero slide-up">
+        <div class="status-hero-top">
+          <div class="hero-score-block">
+            <div class="hero-score" style="color:${scoreColor}">
+              ${score ? `${score}<span class="hero-score-denom">/10</span>` : '—'}
+            </div>
+            <div class="hero-label">${label}</div>
+            ${age ? `<div class="hero-age">${age}</div>` : ''}
+          </div>
+          <div class="hero-test-badge hero-test-${testState}">🧪 ${testText}</div>
         </div>
+        ${score ? `<div class="health-bar" style="margin-top:var(--space-md)"><div class="health-bar-fill" style="width:${pct}%"></div></div>` : ''}
+        ${chips.length ? `<div class="hero-chips">${chips.join('')}</div>` : ''}
       </div>`;
   },
 
-  renderSensors(d) {
-    const s = d.sensors || {};
-    const items = [];
-    if (s.pool_temp_f != null) {
-      items.push(`<div class="stat-card animate-in"><div class="stat-icon">🌡️</div>
-        <div class="stat-value">${Fmt.temp(s.pool_temp_f)}</div>
-        <div class="stat-label">Pool Temp</div></div>`);
+  // ── Action Center ─────────────────────────────────────────────
+  renderActionCenter(d) {
+    const actions = [];
+
+    // Chemistry recommendations with dosage guidance
+    (d.recommendations || []).forEach(r => {
+      actions.push({
+        severity: r.severity,
+        sort: r.severity === 'critical' ? 0 : r.severity === 'warning' ? 1 : 2,
+        icon: r.icon,
+        title: r.category,
+        body: r.message,
+      });
+    });
+
+    // Urgent/overdue maintenance reminders
+    (d.reminders || [])
+      .filter(r => r.urgency === 'urgent' || r.urgency === 'overdue')
+      .forEach(r => {
+        actions.push({
+          severity: r.urgency === 'urgent' ? 'critical' : 'warning',
+          sort: r.urgency === 'urgent' ? 0 : 1,
+          icon: r.icon,
+          title: r.display_name,
+          body: r.days_since != null
+            ? `Last done ${r.days_since} days ago — recommended every ${r.interval_days} days.`
+            : `Never done — recommended every ${r.interval_days} days.`,
+        });
+      });
+
+    if (actions.length === 0) {
+      return `
+        <div class="action-center animate-in">
+          <div class="all-good-banner">
+            <div class="all-good-icon">✅</div>
+            <div class="all-good-content">
+              <div class="all-good-title">Pool looks great!</div>
+              <div class="all-good-sub">No chemistry corrections or urgent tasks needed right now.</div>
+            </div>
+          </div>
+        </div>`;
     }
-    if (s.pump_state != null) {
-      const pumpColor = s.pump_state === 'on' ? 'var(--color-success)' : 'var(--text-muted)';
-      items.push(`<div class="stat-card animate-in"><div class="stat-icon">⚙️</div>
-        <div class="stat-value" style="color:${pumpColor}">${s.pump_state === 'on' ? 'ON' : 'OFF'}</div>
-        <div class="stat-label">Pump</div></div>`);
-    }
-    if (s.pump_energy_kwh != null) {
-      items.push(`<div class="stat-card animate-in"><div class="stat-icon">⚡</div>
-        <div class="stat-value">${Fmt.number(s.pump_energy_kwh, 1)}</div>
-        <div class="stat-label">kWh</div></div>`);
-    }
-    if (d.weather && d.weather.uv_index != null) {
-      const uvLevel = d.weather.uv_index >= 8 ? 'Very High' : d.weather.uv_index >= 6 ? 'High' : d.weather.uv_index >= 3 ? 'Moderate' : 'Low';
-      items.push(`<div class="stat-card animate-in"><div class="stat-icon">☀️</div>
-        <div class="stat-value">${Math.round(d.weather.uv_index)}</div>
-        <div class="stat-label">UV ${uvLevel}</div></div>`);
-    }
-    if (items.length === 0) return '';
-    return `<div class="sensor-row"><div class="section-title">Pool Status</div>
-      <div class="stat-grid">${items.join('')}</div></div>`;
+
+    actions.sort((a, b) => a.sort - b.sort);
+
+    const critCount = actions.filter(a => a.severity === 'critical').length;
+    const warnCount = actions.filter(a => a.severity === 'warning').length;
+    const infCount  = actions.filter(a => a.severity === 'info').length;
+    const chips = [
+      critCount ? `<span class="ac-chip ac-chip-critical">${critCount} Critical</span>` : '',
+      warnCount ? `<span class="ac-chip ac-chip-warning">${warnCount} Warning</span>` : '',
+      infCount  ? `<span class="ac-chip ac-chip-info">${infCount} Info</span>` : '',
+    ].filter(Boolean).join('');
+
+    const items = actions.map(a => `
+      <div class="action-item action-${a.severity}">
+        <div class="action-item-header">
+          <span class="action-item-icon">${a.icon}</span>
+          <span class="action-item-title">${a.title}</span>
+        </div>
+        <div class="action-item-body">${a.body}</div>
+      </div>`).join('');
+
+    return `
+      <div class="action-center animate-in">
+        <div class="section-title" style="display:flex;align-items:center;gap:var(--space-sm);margin-bottom:var(--space-md)">
+          Actions Needed
+          <div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div>
+        </div>
+        <div class="action-list">${items}</div>
+      </div>`;
   },
 
-  renderChemistry(d) {
-    // Abbreviation and full name for every parameter
-    const PARAM_META = {
-      ph:               { abbr: 'pH',   full: 'pH Level' },
-      free_chlorine:    { abbr: 'FC',   full: 'Free Chlorine' },
-      total_chlorine:   { abbr: 'TC',   full: 'Total Chlorine' },
-      alkalinity:       { abbr: 'Alk',  full: 'Total Alkalinity' },
-      cyanuric_acid:    { abbr: 'CYA',  full: 'Cyanuric Acid (Stabilizer)' },
-      calcium_hardness: { abbr: 'CH',   full: 'Calcium Hardness' },
-      bromine:          { abbr: 'Br',   full: 'Bromine' },
+  // ── Chemistry Panel ───────────────────────────────────────────
+  renderChemistryPanel(d) {
+    const RANGES = {
+      ph:               { min: 6.2, max: 8.4, idealLow: 7.2,  idealHigh: 7.6,  unit: '' },
+      free_chlorine:    { min: 0,   max: 10,  idealLow: 1.0,  idealHigh: 4.0,  unit: 'ppm' },
+      total_chlorine:   { min: 0,   max: 10,  idealLow: 1.0,  idealHigh: 4.0,  unit: 'ppm' },
+      alkalinity:       { min: 0,   max: 240, idealLow: 80,   idealHigh: 120,  unit: 'ppm' },
+      cyanuric_acid:    { min: 0,   max: 240, idealLow: 30,   idealHigh: 50,   unit: 'ppm' },
+      calcium_hardness: { min: 0,   max: 800, idealLow: 200,  idealHigh: 400,  unit: 'ppm' },
+      bromine:          { min: 0,   max: 10,  idealLow: 2.0,  idealHigh: 6.0,  unit: 'ppm' },
+    };
+    const LABELS = {
+      ph: 'pH', free_chlorine: 'Free Chlorine', total_chlorine: 'Total Chlorine',
+      alkalinity: 'Alkalinity', cyanuric_acid: 'Stabilizer (CYA)',
+      calcium_hardness: 'Calcium Hardness', bromine: 'Bromine',
     };
 
     if (!d.chemistry || d.chemistry.length === 0) {
-      return `<div class="chemistry-section"><div class="section-title">Water Chemistry</div>
-        <div class="card" style="text-align:center;color:var(--text-muted);padding:var(--space-2xl)">
-        No measurements yet. Tap + to add your first test.</div></div>`;
+      return `
+        <div class="chemistry-panel">
+          <div class="section-title">Water Chemistry</div>
+          <div class="card" style="text-align:center;color:var(--text-muted);padding:var(--space-2xl)">
+            No measurements yet. Tap + to add your first test.
+          </div>
+        </div>`;
     }
 
-    const cards = d.chemistry.map(c => {
-      if (c.value == null) return '';
-      const meta = PARAM_META[c.parameter] || { abbr: c.parameter.toUpperCase(), full: c.parameter };
-      // Compact status icon — avoid repeating text
-      const statusIcon = c.status === 'ideal' ? '✓' : c.status === 'low' ? '↓' : c.status === 'high' ? '↑' : '•';
-      const statusClass = `status-${c.status}`;
-      const valDisplay = `${c.value}${c.unit ? '<span style="font-size:var(--fs-xs);opacity:0.7"> ' + c.unit + '</span>' : ''}`;
-      return `<div class="chem-card animate-in" style="--chem-color:${c.color}" title="${meta.full}: ${c.value}${c.unit ? ' ' + c.unit : ''} — ${c.label}">
-        <div class="param-name">${meta.abbr}</div>
-        <div class="param-value" style="color:${c.color}">${valDisplay}</div>
-        <div class="param-status ${statusClass}" style="display:flex;align-items:center;justify-content:center;gap:3px">
-          <span style="font-size:10px;font-weight:700">${statusIcon}</span>
-          <span>${c.status === 'ideal' ? 'OK' : c.label}</span>
+    const testAge = d.chemistry_age_hours;
+    const ageText = testAge == null ? null
+      : testAge < 1 ? 'Just tested'
+      : testAge < 24 ? `${Math.round(testAge)}h ago`
+      : `${Math.round(testAge / 24)}d ago`;
+    const ageState = testAge == null ? 'stale' : testAge < 24 ? 'fresh' : testAge < 72 ? 'aging' : 'stale';
+
+    const rows = d.chemistry.filter(c => c.value != null).map(c => {
+      const r = RANGES[c.parameter];
+      const label = LABELS[c.parameter] || c.parameter;
+      const trend = this._getTrendDir(c.parameter);
+      const trendHtml = !trend ? ''
+        : `<span class="trend-dir trend-${trend}">${trend === 'up' ? '↗' : trend === 'down' ? '↘' : '→'}</span>`;
+
+      const statusText = c.status === 'ideal' ? '✓' : c.status === 'low' ? '↑ Low' : '↓ High';
+
+      let rangeBar = '';
+      if (r) {
+        const pct = v => Math.max(0, Math.min(100, (v - r.min) / (r.max - r.min) * 100));
+        const iLeft   = pct(r.idealLow).toFixed(1);
+        const iWidth  = (pct(r.idealHigh) - pct(r.idealLow)).toFixed(1);
+        const vPct    = pct(c.value).toFixed(1);
+        const unitStr = r.unit ? ` ${r.unit}` : '';
+        rangeBar = `
+          <div class="chem-range-row">
+            <div class="param-range-bar">
+              <div class="param-range-track"></div>
+              <div class="param-range-ideal" style="left:${iLeft}%;width:${iWidth}%"></div>
+              <div class="param-range-marker" style="left:${vPct}%;background:${c.color}"></div>
+            </div>
+            <span class="param-ideal-label">Ideal ${r.idealLow}–${r.idealHigh}${unitStr}</span>
+          </div>`;
+      }
+
+      return `
+        <div class="chem-row chem-row-${c.status}">
+          <div class="chem-row-top">
+            <span class="chem-row-name">${label}</span>
+            <div class="chem-row-right">
+              <span class="chem-row-val" style="color:${c.color}">${c.value}${c.unit ? `<span class="chem-unit"> ${c.unit}</span>` : ''}</span>
+              ${trendHtml}
+              <span class="chem-status-pill chem-pill-${c.status}">${statusText}</span>
+            </div>
+          </div>
+          ${rangeBar}
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="chemistry-panel">
+        <div class="section-title">
+          Water Chemistry
+          ${ageText ? `<span class="section-meta chem-age-${ageState}"> · ${ageText}</span>` : ''}
         </div>
+        <div class="chem-rows-list card">${rows}</div>
       </div>`;
-    }).filter(Boolean).join('');
-
-    const ageColor = (d.chemistry_age_hours || 0) < 24 ? 'var(--color-success)' :
-      (d.chemistry_age_hours || 0) < 72 ? 'var(--color-warning)' : 'var(--color-danger)';
-    const ageText = d.chemistry_age_hours != null
-      ? (d.chemistry_age_hours < 1 ? 'Just tested' : d.chemistry_age_hours < 24 ? `${Math.round(d.chemistry_age_hours)}h ago` : `${Math.round(d.chemistry_age_hours / 24)}d ago`)
-      : '';
-
-    return `<div class="chemistry-section">
-      <div class="section-title">Water Quality</div>
-      <div class="chem-grid">${cards}</div>
-      <div class="chem-legend">
-        <button class="chem-legend-toggle" id="chemLegendToggle">ℹ️ Abbreviations</button>
-        <div class="chem-legend-content" id="chemLegendContent">
-          <div class="chem-legend-row"><span class="chem-legend-abbr">TC</span><span class="chem-legend-name">Total Chlorine</span></div>
-          <div class="chem-legend-row"><span class="chem-legend-abbr">FC</span><span class="chem-legend-name">Free Chlorine</span></div>
-          <div class="chem-legend-row"><span class="chem-legend-abbr">Br</span><span class="chem-legend-name">Bromine</span></div>
-          <div class="chem-legend-row"><span class="chem-legend-abbr">Alk</span><span class="chem-legend-name">Total Alkalinity</span></div>
-          <div class="chem-legend-row"><span class="chem-legend-abbr">CYA</span><span class="chem-legend-name">Cyanuric Acid</span></div>
-          <div class="chem-legend-row"><span class="chem-legend-abbr">CH</span><span class="chem-legend-name">Calcium Hardness</span></div>
-          <div class="chem-legend-row"><span class="chem-legend-abbr">pH</span><span class="chem-legend-name">Potential of Hydrogen</span></div>
-        </div>
-      </div>
-      ${ageText ? `<div class="chemistry-age"><span class="age-dot" style="background:${ageColor}"></span> Last tested ${ageText}</div>` : ''}
-    </div>`;
   },
 
-  bindChemLegend() {
-    const btn = document.getElementById('chemLegendToggle');
-    const content = document.getElementById('chemLegendContent');
-    if (!btn || !content) return;
-    btn.addEventListener('click', () => {
-      const open = content.classList.toggle('open');
-      btn.textContent = open ? '✕ Close' : 'ℹ️ Abbreviations';
+  // ── Trends ────────────────────────────────────────────────────
+  renderTrends() {
+    if (!this.trends || Object.keys(this.trends).length === 0) return '';
+    return `
+      <div class="trends-section">
+        <div class="trends-header">
+          <div class="section-title" style="margin:0">Trends</div>
+          <div class="trend-toggle-group">
+            <button class="trend-toggle-btn${this._trendDays === 7  ? ' active' : ''}" data-days="7">7d</button>
+            <button class="trend-toggle-btn${this._trendDays === 14 ? ' active' : ''}" data-days="14">14d</button>
+            <button class="trend-toggle-btn${this._trendDays === 30 ? ' active' : ''}" data-days="30">30d</button>
+          </div>
+        </div>
+        <div id="trendCharts">${this._renderTrendCharts(this._trendDays)}</div>
+      </div>`;
+  },
+
+  _renderTrendCharts(days) {
+    const paramConfig = {
+      total_chlorine:   { label: 'Total Chlorine', color: '#D46B94', unit: 'ppm' },
+      free_chlorine:    { label: 'Free Chlorine',  color: '#E8A0B4', unit: 'ppm' },
+      ph:               { label: 'pH',             color: '#5B9B3E', unit: '' },
+      alkalinity:       { label: 'Alkalinity',     color: '#3B8C4A', unit: 'ppm' },
+      cyanuric_acid:    { label: 'CYA',            color: '#C87098', unit: 'ppm' },
+      bromine:          { label: 'Bromine',        color: '#B83878', unit: 'ppm' },
+      calcium_hardness: { label: 'Hardness',       color: '#5858C0', unit: 'ppm' },
+    };
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+
+    let charts = '';
+    for (const [param, allPoints] of Object.entries(this.trends)) {
+      const points = allPoints.filter(p => !p.date || new Date(p.date) >= cutoff);
+      if (points.length < 2) continue;
+      const cfg = paramConfig[param] || { label: param, color: '#20B2AA', unit: '' };
+      const spec = Chemistry.ranges[param];
+      const latestVal = points[points.length - 1].value;
+      const trendDir = this._getTrendDir(param);
+      const trendHtml = !trendDir ? ''
+        : ` <span class="trend-dir trend-${trendDir}">${trendDir === 'up' ? '↗' : trendDir === 'down' ? '↘' : '→'}</span>`;
+
+      charts += `
+        <div class="trend-card">
+          <div class="trend-header">
+            <span class="trend-title">${cfg.label}</span>
+            <span class="trend-value" style="color:${cfg.color}">${latestVal}${cfg.unit ? ' ' + cfg.unit : ''}${trendHtml}</span>
+          </div>
+          <div class="trend-chart">${this.renderSparkline(points, cfg.color, spec)}</div>
+        </div>`;
+    }
+
+    return charts || `<div style="text-align:center;color:var(--text-muted);padding:var(--space-xl);font-size:var(--fs-sm)">Not enough data for this range.</div>`;
+  },
+
+  bindTrendToggle() {
+    document.querySelectorAll('.trend-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const days = parseInt(btn.dataset.days);
+        this._trendDays = days;
+        document.querySelectorAll('.trend-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+        const container = document.getElementById('trendCharts');
+        if (container) container.innerHTML = this._renderTrendCharts(days);
+      });
     });
   },
 
-  renderRecommendations(d) {
-    if (!d.recommendations || d.recommendations.length === 0) return '';
-    const items = d.recommendations.map(r => `
-      <div class="rec-item rec-${r.severity}">
-        <span class="rec-icon">${r.icon}</span>
-        <div><span class="rec-category">${r.category}</span>
-        <div class="rec-text">${r.message}</div></div>
-      </div>`).join('');
-    return `<div class="recommendations-section">
-      <div class="section-title">Recommendations</div>${items}</div>`;
+  _getTrendDir(param) {
+    const pts = this.trends?.[param];
+    if (!pts || pts.length < 4) return null;
+    const slice = pts.slice(-6);
+    const first = slice[0].value, last = slice[slice.length - 1].value;
+    const diff = last - first;
+    const threshold = {
+      ph: 0.15, free_chlorine: 0.5, total_chlorine: 0.5,
+      alkalinity: 8, cyanuric_acid: 5, calcium_hardness: 20, bromine: 0.5,
+    }[param] ?? (Math.abs(first) * 0.08 || 0.5);
+    if (diff > threshold) return 'up';
+    if (diff < -threshold) return 'down';
+    return 'stable';
   },
 
-  // Tasks that need a full Pooly form — "Done" navigates to quick-entry
+  // ── Weather Insights ──────────────────────────────────────────
+  renderWeatherInsights(d) {
+    if (!d.weather || d.weather.air_temp_f == null) return '';
+    const w = d.weather;
+
+    const tempF = Math.round(w.air_temp_f);
+    const uv = w.uv_index != null ? Math.round(w.uv_index) : null;
+    const uvLabel = uv == null ? null
+      : uv >= 11 ? 'Extreme' : uv >= 8 ? 'Very High' : uv >= 6 ? 'High' : uv >= 3 ? 'Moderate' : 'Low';
+    const uvState = uv != null && uv >= 8 ? 'danger' : uv != null && uv >= 6 ? 'warn' : 'ok';
+
+    const insights = [];
+    if (uv != null && uv >= 6) {
+      insights.push({ icon: '☀️', level: uv >= 8 ? 'warning' : 'info',
+        text: `UV is ${uvLabel} (${uv}) — chlorine degrades ${uv >= 8 ? '2–3×' : '~1.5×'} faster in direct sun. Consider testing Free Chlorine today.` });
+    }
+    if (tempF >= 85) {
+      insights.push({ icon: '🌡️', level: 'warning',
+        text: `Hot weather (${tempF}°F) accelerates algae growth and raises chlorine demand. Test more frequently during heat waves.` });
+    }
+    if (w.humidity != null && w.humidity < 30) {
+      insights.push({ icon: '💧', level: 'info',
+        text: `Low humidity (${Math.round(w.humidity)}%) increases evaporation. Monitor water level and chemical concentration.` });
+    }
+    if (w.wind_speed != null && w.wind_speed > 15) {
+      insights.push({ icon: '🌬️', level: 'info',
+        text: `Gusty winds at ${Math.round(w.wind_speed)} mph — debris may enter the pool. Check the skimmer basket.` });
+    }
+    // Backend-generated impacts — skip if a topic is already covered above
+    const coveredTopics = [];
+    if (uv != null && uv >= 6) coveredTopics.push('uv', 'ultraviolet', 'chlorine degrad');
+    if (tempF >= 85) coveredTopics.push('hot', 'heat', 'algae', 'temperature');
+    if (w.humidity != null && w.humidity < 30) coveredTopics.push('humidity', 'evaporation');
+    if (w.wind_speed != null && w.wind_speed > 15) coveredTopics.push('wind', 'debris', 'skimmer');
+    (w.pool_impact || []).forEach(msg => {
+      const lower = msg.toLowerCase();
+      if (!coveredTopics.some(t => lower.includes(t))) {
+        insights.push({ icon: '💡', level: 'info', text: msg });
+      }
+    });
+
+    const statItems = [
+      `<div class="w-stat"><span class="w-stat-val">${tempF}°F</span><span class="w-stat-lbl">${w.condition || 'Air'}</span></div>`,
+      w.humidity != null ? `<div class="w-stat"><span class="w-stat-val">${Math.round(w.humidity)}%</span><span class="w-stat-lbl">Humidity</span></div>` : '',
+      uv != null ? `<div class="w-stat"><span class="w-stat-val w-uv-${uvState}">${uv}</span><span class="w-stat-lbl">UV Index</span></div>` : '',
+      w.wind_speed != null ? `<div class="w-stat"><span class="w-stat-val">${Math.round(w.wind_speed)}</span><span class="w-stat-lbl">mph Wind</span></div>` : '',
+    ].filter(Boolean).join('');
+
+    const impactsHtml = insights.length ? `
+      <div class="weather-pool-impacts">
+        ${insights.map(i => `
+          <div class="pool-impact-row impact-${i.level}">
+            <span class="impact-icon">${i.icon}</span>
+            <span class="impact-text">${i.text}</span>
+          </div>`).join('')}
+      </div>` : '';
+
+    return `
+      <div class="weather-insights-section">
+        <div class="section-title">Weather &amp; Pool Impact</div>
+        <div class="weather-card">
+          <div class="weather-stats-row">${statItems}</div>
+          ${impactsHtml}
+        </div>
+      </div>`;
+  },
+
+  // ── Pool Care Reminders ───────────────────────────────────────
   _FORM_TASKS: {
     test_water:   { tab: 'test' },
     add_chlorine: { tab: 'chem', preselect: 'chlorine' },
@@ -183,7 +422,6 @@ const DashboardPage = {
     check_cya:    { tab: 'test' },
   },
 
-  // Direct-log API call for simple physical tasks
   async _logDirectTask(taskType, entryDate, notes) {
     const maintTasks = new Set(['clean_cartridge', 'add_water', 'backwash', 'brush_walls']);
     const statusMap  = { clean_skimmer: 'clean_skimmer', robot_run: 'robot_run', vacuum: 'vacuumed', empty_basket: 'basket_emptied' };
@@ -199,7 +437,6 @@ const DashboardPage = {
     }
   },
 
-  // Build the inline quick-log form that replaces Done/Skip when user taps Done
   _buildLogForm(taskType, displayName) {
     const today = new Date().toISOString().split('T')[0];
     return `<div class="reminder-log-form">
@@ -259,14 +496,14 @@ const DashboardPage = {
           </div>
         </div>`;
     }).join('');
-    return `<div class="reminders-section">
-      <div class="section-title">Pool Care <span style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:normal">tap to act</span></div>
-      <div id="remindersContainer">${items}</div>
-    </div>`;
+    return `
+      <div class="reminders-section">
+        <div class="section-title">Pool Care <span style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:normal;text-transform:none;letter-spacing:0">· tap to act</span></div>
+        <div id="remindersContainer">${items}</div>
+      </div>`;
   },
 
   bindReminders() {
-    // Toggle actions on card tap
     document.querySelectorAll('.reminder-main').forEach(main => {
       main.addEventListener('click', () => {
         const item = main.closest('.reminder-item');
@@ -276,14 +513,12 @@ const DashboardPage = {
       });
     });
 
-    // Close when tapping elsewhere
     document.addEventListener('click', e => {
       if (!e.target.closest('.reminder-item')) {
         document.querySelectorAll('.reminder-item.actions-open').forEach(el => el.classList.remove('actions-open'));
       }
     }, { capture: true });
 
-    // Done button
     document.querySelectorAll('[data-done]').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
@@ -294,24 +529,19 @@ const DashboardPage = {
         const actionsEl = item.querySelector('.reminder-actions');
 
         if (isForm) {
-          // Navigate to quick-entry form; form submission auto-completes the reminder
           const cfg = this._FORM_TASKS[taskType];
           if (cfg.preselect) QuickEntryPage.selectedChemical = cfg.preselect;
           QuickEntryPage.pendingReminder = { task_type: taskType, display_name: name };
           App.navigate('quick-entry', { tab: cfg.tab });
         } else {
-          // Show inline quick-log form (with optional backdate)
           actionsEl.innerHTML = this._buildLogForm(taskType, name);
           const form = actionsEl.querySelector('.reminder-log-form');
-          let selectedDays = 0;
 
-          // Date preset buttons
           form.querySelectorAll('.log-preset').forEach(p => {
             p.addEventListener('click', () => {
               form.querySelectorAll('.log-preset').forEach(x => x.classList.remove('active'));
               p.classList.add('active');
               const days = parseInt(p.dataset.days);
-              selectedDays = days;
               const dateInput = form.querySelector('.log-date-input');
               if (days === -1) {
                 dateInput.style.display = 'block';
@@ -325,7 +555,6 @@ const DashboardPage = {
             });
           });
 
-          // Cancel
           form.querySelector('.log-cancel').addEventListener('click', e => {
             e.stopPropagation();
             actionsEl.innerHTML = `
@@ -339,7 +568,6 @@ const DashboardPage = {
             this._rebindActionsEl(actionsEl, item);
           });
 
-          // Confirm log
           form.querySelector('.log-confirm').addEventListener('click', async e => {
             e.stopPropagation();
             try {
@@ -349,7 +577,6 @@ const DashboardPage = {
                 ? new Date(dateInput.value + 'T12:00:00').toISOString()
                 : null;
               const notes = form.querySelector('.log-note-textarea')?.value?.trim() || null;
-
               await this._logDirectTask(taskType, entryDate, notes);
               item.classList.remove('actions-open');
               item.classList.add('completing');
@@ -361,7 +588,6 @@ const DashboardPage = {
       });
     });
 
-    // Skip button
     document.querySelectorAll('[data-skip]').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
@@ -377,7 +603,6 @@ const DashboardPage = {
       });
     });
 
-    // Swipe to reveal actions (touch devices)
     document.querySelectorAll('.reminder-item').forEach(item => {
       let startX = 0;
       item.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
@@ -393,16 +618,11 @@ const DashboardPage = {
     });
   },
 
-  // Re-bind restored Done/Skip buttons after cancel
   _rebindActionsEl(actionsEl, item) {
     actionsEl.querySelector('[data-done]')?.addEventListener('click', async e => {
       e.stopPropagation();
       const btn = e.currentTarget;
-      const taskType = btn.dataset.done;
-      const name = btn.dataset.name || taskType;
-      actionsEl.innerHTML = this._buildLogForm(taskType, name);
-      // Re-enter the same flow — simplest: just re-call bindReminders subset
-      // For simplicity, reload the reminder section after a short delay
+      actionsEl.innerHTML = this._buildLogForm(btn.dataset.done, btn.dataset.name || btn.dataset.done);
     });
     actionsEl.querySelector('[data-skip]')?.addEventListener('click', async e => {
       e.stopPropagation();
@@ -416,24 +636,7 @@ const DashboardPage = {
     });
   },
 
-  renderWeather(d) {
-    if (!d.weather || !d.weather.air_temp_f) return '';
-    const w = d.weather;
-    const impacts = (w.pool_impact || []).map(i => `<div class="weather-impact-item">${i}</div>`).join('');
-    return `<div class="weather-section"><div class="section-title">Weather</div>
-      <div class="weather-card">
-        <div class="weather-current">
-          <div class="weather-temp">${Math.round(w.air_temp_f)}°F</div>
-          <div><div>${w.condition || ''}</div>
-          <div class="weather-details">
-            ${w.humidity != null ? `<span>💧 ${Math.round(w.humidity)}%</span>` : ''}
-            ${w.wind_speed != null ? `<span>💨 ${Math.round(w.wind_speed)} mph</span>` : ''}
-          </div></div>
-        </div>
-        ${impacts ? `<div class="weather-impact">${impacts}</div>` : ''}
-      </div></div>`;
-  },
-
+  // ── Recent Activity ───────────────────────────────────────────
   renderRecent(d) {
     if (!d.recent_entries || d.recent_entries.length === 0) return '';
     const items = d.recent_entries.slice(0, 5).map(e => `
@@ -442,81 +645,38 @@ const DashboardPage = {
         <span class="activity-text">${Fmt.entryTypeLabel(e.entry_type)}${e.notes ? ' — ' + e.notes.substring(0, 40) : ''}</span>
         <span class="activity-time">${Fmt.timeAgo(e.entry_date)}</span>
       </div>`).join('');
-    return `<div class="recent-section"><div class="section-title">Recent Activity</div>
-      <div class="card">${items}</div></div>`;
-  },
-
-  // ── TREND CHARTS ────────────────────────────────────────────
-  renderTrends() {
-    if (!this.trends || Object.keys(this.trends).length === 0) return '';
-
-    const paramConfig = {
-      total_chlorine: { label: 'Total Chlorine', color: '#D46B94', unit: 'ppm' },
-      free_chlorine: { label: 'Free Chlorine', color: '#E8A0B4', unit: 'ppm' },
-      ph: { label: 'pH', color: '#5B9B3E', unit: '' },
-      alkalinity: { label: 'Alkalinity', color: '#3B8C4A', unit: 'ppm' },
-      cyanuric_acid: { label: 'CYA', color: '#C87098', unit: 'ppm' },
-      bromine: { label: 'Bromine', color: '#B83878', unit: 'ppm' },
-      calcium_hardness: { label: 'Hardness', color: '#5858C0', unit: 'ppm' },
-    };
-
-    let charts = '';
-    for (const [param, points] of Object.entries(this.trends)) {
-      if (points.length < 2) continue;
-      const cfg = paramConfig[param] || { label: param, color: '#20B2AA', unit: '' };
-      const spec = Chemistry.ranges[param];
-      const latestVal = points[points.length - 1].value;
-      charts += `<div class="trend-card">
-        <div class="trend-header">
-          <span class="trend-title">${cfg.label}</span>
-          <span class="trend-value" style="color:${cfg.color}">${latestVal}${cfg.unit ? ' ' + cfg.unit : ''}</span>
-        </div>
-        <div class="trend-chart">${this.renderSparkline(points, cfg.color, spec)}</div>
+    return `
+      <div class="recent-section">
+        <div class="section-title">Recent Activity</div>
+        <div class="card">${items}</div>
       </div>`;
-    }
-
-    if (!charts) return '';
-    return `<div class="trends-section">
-      <div class="section-title">30-Day Trends</div>${charts}</div>`;
   },
 
+  // ── Sparkline SVG ─────────────────────────────────────────────
   renderSparkline(points, color, spec) {
     const w = 300, h = 50, pad = 4;
     const values = points.map(p => p.value);
-    let yMin = Math.min(...values);
-    let yMax = Math.max(...values);
-
-    // Expand range to include ideal zone if available
+    let yMin = Math.min(...values), yMax = Math.max(...values);
     if (spec) {
       yMin = Math.min(yMin, spec.idealLow * 0.9);
       yMax = Math.max(yMax, spec.idealHigh * 1.1);
     }
     if (yMin === yMax) { yMin -= 1; yMax += 1; }
-
     const xScale = (w - 2 * pad) / (points.length - 1);
     const yScale = (h - 2 * pad) / (yMax - yMin);
-
     const toX = i => pad + i * xScale;
     const toY = v => h - pad - (v - yMin) * yScale;
-
-    // Build SVG path
     const linePoints = points.map((p, i) => `${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(' ');
     const areaPoints = linePoints + ` ${toX(points.length - 1).toFixed(1)},${(h - pad).toFixed(1)} ${toX(0).toFixed(1)},${(h - pad).toFixed(1)}`;
-
-    // Ideal zone rectangle
     let idealZone = '';
-    if (spec && spec.idealLow != null && spec.idealHigh != null) {
-      const iy1 = toY(spec.idealHigh);
-      const iy2 = toY(spec.idealLow);
+    if (spec?.idealLow != null && spec?.idealHigh != null) {
+      const iy1 = toY(spec.idealHigh), iy2 = toY(spec.idealLow);
       idealZone = `<rect x="0" y="${Math.min(iy1, iy2).toFixed(1)}" width="${w}" height="${Math.abs(iy2 - iy1).toFixed(1)}" class="trend-ideal-zone"/>`;
       idealZone += `<line x1="0" y1="${iy1.toFixed(1)}" x2="${w}" y2="${iy1.toFixed(1)}" class="trend-ideal-line"/>`;
       idealZone += `<line x1="0" y1="${iy2.toFixed(1)}" x2="${w}" y2="${iy2.toFixed(1)}" class="trend-ideal-line"/>`;
     }
-
-    // Last dot
     const lastI = points.length - 1;
     const dot = `<circle cx="${toX(lastI).toFixed(1)}" cy="${toY(points[lastI].value).toFixed(1)}" class="trend-dot" stroke="${color}"/>`;
-
     return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
       ${idealZone}
       <polygon points="${areaPoints}" class="trend-area" fill="${color}"/>

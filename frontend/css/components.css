@@ -445,3 +445,191 @@
   display: grid; grid-template-columns: 1fr 2fr; gap: var(--space-md);
   margin-top: var(--space-2xl); padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* ── Journal / History Page ──────────────────────────────────── */
+.journal-cat-bar {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-lg);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  background: rgba(10, 22, 40, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: sticky;
+  top: var(--header-height);
+  z-index: 40;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.journal-cat-bar::-webkit-scrollbar { display: none; }
+
+.jcat-chip {
+  flex: 0 0 auto;
+  padding: 5px 14px;
+  border-radius: var(--radius-full);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  font-family: var(--font-family);
+  -webkit-tap-highlight-color: transparent;
+}
+.jcat-chip:active { transform: scale(0.95); }
+.jcat-chip.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--text-on-accent);
+  box-shadow: 0 2px 8px rgba(32, 178, 170, 0.3);
+}
+
+.journal-list { padding-top: var(--space-md); padding-bottom: var(--space-md); }
+
+.journal-date-header {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  padding: var(--space-md) var(--space-xs) var(--space-sm);
+}
+
+.journal-card {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-sm);
+  overflow: hidden;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.journal-card:active { transform: scale(0.992); }
+
+.jc-accent {
+  width: 4px;
+  flex-shrink: 0;
+}
+
+.jc-icon {
+  width: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  padding: var(--space-md) 0;
+}
+
+.jc-body {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-md) var(--space-sm) var(--space-md) 0;
+}
+
+.jc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-bottom: 3px;
+}
+
+.jc-type {
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+}
+
+.jc-time {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.jc-desc {
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.jc-notes {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.4;
+  margin-top: 3px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.jc-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.jc-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.jc-btn:active { transform: scale(0.88); }
+.jc-btn-edit:hover { color: var(--color-accent); background: rgba(32, 178, 170, 0.12); }
+.jc-btn-delete:hover { color: var(--color-danger); background: var(--color-danger-bg); }
+.jc-btn-confirm {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+/* Filter button in journal header */
+.jnl-filter-btn {
+  position: relative;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.jnl-filter-btn.active {
+  background: rgba(32, 178, 170, 0.12);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.jnl-filter-dot {
+  position: absolute;
+  top: -3px; right: -3px;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 2px solid var(--bg-base);
+}
+.jnl-filter-dot.hidden { display: none; }
