@@ -119,6 +119,9 @@ const DashboardPage = {
         icon: r.icon,
         title: r.category,
         body: r.message,
+        consequences: r.consequences || [],
+        impact_tags: r.impact_tags || [],
+        impact_score: r.impact_score || 1,
       });
     });
 
@@ -161,14 +164,48 @@ const DashboardPage = {
       infCount  ? `<span class="ac-chip ac-chip-info">${infCount} Info</span>` : '',
     ].filter(Boolean).join('');
 
-    const items = actions.map(a => `
-      <div class="action-item action-${a.severity}">
-        <div class="action-item-header">
-          <span class="action-item-icon">${a.icon}</span>
-          <span class="action-item-title">${a.title}</span>
-        </div>
-        <div class="action-item-body">${a.body}</div>
-      </div>`).join('');
+    const TAG_META = {
+      health:    { icon: '⚕️', label: 'Health risk' },
+      cost:      { icon: '💸', label: 'Higher cost' },
+      equipment: { icon: '🔧', label: 'Equipment damage' },
+      water:     { icon: '🌊', label: 'Water quality' },
+    };
+
+    const items = actions.map(a => {
+      const hasConsequences = a.consequences && a.consequences.length > 0;
+      let consequenceHtml = '';
+      if (hasConsequences) {
+        const dots = [1, 2, 3].map(n =>
+          `<span class="impact-dot${n <= a.impact_score ? ' filled' : ''}"></span>`
+        ).join('');
+        const impactLabel = a.impact_score >= 3 ? 'High' : a.impact_score === 2 ? 'Medium' : 'Low';
+        const tagHtml = (a.impact_tags || []).map(t => {
+          const m = TAG_META[t] || { icon: '', label: t };
+          return `<span class="impact-tag">${m.icon} ${m.label}</span>`;
+        }).join('');
+        const bulletHtml = a.consequences.map(c =>
+          `<li>${c}</li>`
+        ).join('');
+        consequenceHtml = `
+          <div class="consequence-strip">
+            <div class="consequence-header">
+              <span class="consequence-label">If you skip this:</span>
+              <span class="impact-meter">${dots}<span class="impact-meter-label">${impactLabel} impact</span></span>
+            </div>
+            <ul class="consequence-list">${bulletHtml}</ul>
+            ${tagHtml ? `<div class="impact-tags">${tagHtml}</div>` : ''}
+          </div>`;
+      }
+      return `
+        <div class="action-item action-${a.severity}">
+          <div class="action-item-header">
+            <span class="action-item-icon">${a.icon}</span>
+            <span class="action-item-title">${a.title}</span>
+          </div>
+          <div class="action-item-body">${a.body}</div>
+          ${consequenceHtml}
+        </div>`;
+    }).join('');
 
     return `
       <div class="action-center animate-in">

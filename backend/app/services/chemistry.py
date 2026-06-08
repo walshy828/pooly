@@ -149,7 +149,6 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
     ph = measurement.get("ph")
     if ph is not None:
         if ph < 7.2:
-            # Soda ash: ~6 oz per 10,000 gal raises pH 0.2 points → 30 oz per point
             delta = 7.4 - ph
             oz_needed = 30 * delta * volume_factor
             recs.append({
@@ -157,9 +156,15 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 "message": f"pH is {ph} (target 7.4). Add approximately {_fmt_oz(oz_needed)} of pH Increaser (Soda Ash).",
                 "severity": "critical" if ph < 6.8 else "warning",
                 "icon": "⬆️",
+                "consequences": [
+                    "Chlorine loses up to 50% of its sanitizing power",
+                    "Eye and skin irritation for swimmers",
+                    "Corrosion of metal fittings, ladder, and equipment",
+                ],
+                "impact_tags": ["health", "cost", "equipment"],
+                "impact_score": 3,
             })
         elif ph > 7.6:
-            # Muriatic acid: ~6 oz per 10,000 gal lowers pH 0.2 points → 30 oz per point
             delta = ph - 7.4
             oz_needed = 30 * delta * volume_factor
             recs.append({
@@ -167,13 +172,18 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 "message": f"pH is {ph} (target 7.4). Add approximately {_fmt_oz(oz_needed)} of pH Decreaser (Muriatic Acid).",
                 "severity": "critical" if ph > 8.0 else "warning",
                 "icon": "⬇️",
+                "consequences": [
+                    "Chlorine becomes up to 90% less effective at this level",
+                    "Cloudy water and scale buildup on surfaces",
+                    "Eye and skin irritation for swimmers",
+                ],
+                "impact_tags": ["health", "cost", "water"],
+                "impact_score": 3,
             })
 
     fc = measurement.get("free_chlorine")
     if fc is not None:
         if fc < 1.0:
-            # Liquid chlorine (10%): ~10 oz per 10,000 gal raises 1 ppm
-            # Granular (Cal-Hypo 68%): ~2 oz per 10,000 gal raises 1 ppm
             delta = 3.0 - fc
             oz_liquid = 10 * delta * volume_factor
             oz_granular = 2 * delta * volume_factor
@@ -186,6 +196,13 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 ),
                 "severity": "critical",
                 "icon": "🧪",
+                "consequences": [
+                    "Bacteria and algae can grow unchecked within 24–48 hours",
+                    "Risk of illness — swimmers' ear, skin rashes, GI issues",
+                    "Green water requires far more product to fix than prevention",
+                ],
+                "impact_tags": ["health", "water", "cost"],
+                "impact_score": 3,
             })
         elif fc > 5.0:
             recs.append({
@@ -193,12 +210,17 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 "message": f"Free Chlorine is {fc} ppm. Avoid swimming until it drops below 5 ppm. Wait or dilute with fresh water.",
                 "severity": "warning",
                 "icon": "⚠️",
+                "consequences": [
+                    "Eye, skin, and respiratory irritation while swimming",
+                    "Bleaching of swimsuits and hair",
+                ],
+                "impact_tags": ["health"],
+                "impact_score": 2,
             })
 
     alk = measurement.get("alkalinity")
     if alk is not None:
         if alk < 80:
-            # Baking soda: 1.5 lbs per 10,000 gal raises alkalinity 10 ppm
             delta = 100 - alk
             lbs_needed = 1.5 * (delta / 10) * volume_factor
             recs.append({
@@ -206,9 +228,15 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 "message": f"Alkalinity is {alk} ppm (target 100 ppm). Add approximately {lbs_needed:.1f} lbs of Alkalinity Increaser (Baking Soda).",
                 "severity": "warning",
                 "icon": "⬆️",
+                "consequences": [
+                    "pH bounces wildly and becomes nearly impossible to stabilize",
+                    "Etching and staining of pool plaster and surfaces",
+                    "Corrosion of metal equipment and fittings",
+                ],
+                "impact_tags": ["equipment", "water"],
+                "impact_score": 2,
             })
         elif alk > 120:
-            # Muriatic acid: ~26 oz per 10,000 gal lowers alkalinity 10 ppm
             delta = alk - 100
             oz_acid = 26 * (delta / 10) * volume_factor
             recs.append({
@@ -216,19 +244,31 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 "message": f"Alkalinity is {alk} ppm (target 100 ppm). Add approximately {_fmt_oz(oz_acid)} of Muriatic Acid. Adjust pH first.",
                 "severity": "info",
                 "icon": "⬇️",
+                "consequences": [
+                    "pH becomes locked high and resistant to correction",
+                    "Cloudy water and scale deposits on surfaces and pipes",
+                    "Chlorine efficiency decreases",
+                ],
+                "impact_tags": ["water", "cost"],
+                "impact_score": 2,
             })
 
     cya = measurement.get("cyanuric_acid")
     if cya is not None:
         if cya < 30:
-            # CYA stabilizer: ~13 oz per 10,000 gal raises CYA 10 ppm
             delta = 40 - cya
             oz_needed = 13 * (delta / 10) * volume_factor
             recs.append({
                 "category": "Low Stabilizer",
-                "message": f"Cyanuric Acid is {cya} ppm (target 40 ppm). Add approximately {_fmt_oz(oz_needed)} of CYA Stabilizer. Chlorine is degrading quickly in sunlight.",
+                "message": f"Cyanuric Acid is {cya} ppm (target 40 ppm). Add approximately {_fmt_oz(oz_needed)} of CYA Stabilizer.",
                 "severity": "warning",
                 "icon": "☀️",
+                "consequences": [
+                    "UV burns off chlorine 2–5× faster — need to dose daily instead of weekly",
+                    "Significantly higher chlorine costs over the season",
+                ],
+                "impact_tags": ["cost"],
+                "impact_score": 2,
             })
         elif cya > 50:
             recs.append({
@@ -236,19 +276,32 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 "message": f"Cyanuric Acid is {cya} ppm (ideal 30–50 ppm). Consider partial water replacement to dilute.",
                 "severity": "info" if cya <= 100 else "warning",
                 "icon": "💧",
+                "consequences": [
+                    "Chlorine effectiveness is reduced (\"chlorine lock\")",
+                    "Higher chlorine levels needed to achieve safe sanitation",
+                    "Only fix is diluting with fresh water — slow and costly",
+                ],
+                "impact_tags": ["health", "cost"],
+                "impact_score": 2,
             })
 
     ch = measurement.get("calcium_hardness")
     if ch is not None:
         if ch < 200:
-            # Calcium chloride: 1.25 lbs per 10,000 gal raises hardness 10 ppm
             delta = 300 - ch
             lbs_needed = 1.25 * (delta / 10) * volume_factor
             recs.append({
                 "category": "Low Hardness",
-                "message": f"Calcium Hardness is {ch} ppm (target 300 ppm). Add approximately {lbs_needed:.1f} lbs of Calcium Hardness Increaser to prevent corrosion.",
+                "message": f"Calcium Hardness is {ch} ppm (target 300 ppm). Add approximately {lbs_needed:.1f} lbs of Calcium Hardness Increaser.",
                 "severity": "info",
                 "icon": "⬆️",
+                "consequences": [
+                    "Soft water pulls calcium from plaster and concrete surfaces",
+                    "Permanent etching and erosion of pool walls and floor",
+                    "Corrosion of metal fittings and equipment",
+                ],
+                "impact_tags": ["equipment"],
+                "impact_score": 2,
             })
         elif ch > 400:
             recs.append({
@@ -256,6 +309,13 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
                 "message": f"Calcium Hardness is {ch} ppm (ideal 200–400 ppm). Dilute with fresh water to prevent scaling.",
                 "severity": "warning",
                 "icon": "💧",
+                "consequences": [
+                    "White scale forms on surfaces, pipes, and the heater",
+                    "Scale buildup clogs filters and reduces equipment lifespan",
+                    "Cloudy water and reduced circulation",
+                ],
+                "impact_tags": ["equipment", "water"],
+                "impact_score": 2,
             })
 
     # Check combined chlorine (total - free)
@@ -263,13 +323,19 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
     if tc is not None and fc is not None:
         combined = tc - fc
         if combined > 0.5:
-            # Shock (Cal-Hypo 68%): ~1 lb per 10,000 gal raises chlorine ~7 ppm
             shock_lbs = round(volume_factor, 1)
             recs.append({
                 "category": "High Combined Chlorine",
                 "message": f"Combined chlorine is {combined:.1f} ppm (should be < 0.5). Shock the pool with approximately {shock_lbs} lbs of shock treatment to break down chloramines.",
                 "severity": "warning",
                 "icon": "⚡",
+                "consequences": [
+                    "Chloramines cause burning eyes and that strong \"chlorine smell\"",
+                    "Sanitization weakens — algae risk increases",
+                    "Respiratory irritation for sensitive swimmers and children",
+                ],
+                "impact_tags": ["health", "water"],
+                "impact_score": 2,
             })
 
     return recs

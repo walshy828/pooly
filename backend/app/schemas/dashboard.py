@@ -50,6 +50,9 @@ class RecommendationItem(BaseModel):
     message: str
     severity: str  # info, warning, critical
     icon: str
+    consequences: list[str] = []       # what happens if action is skipped
+    impact_tags: list[str] = []        # health, cost, equipment, water
+    impact_score: int = 1              # 1–3 magnitude of inaction
 
 
 class DashboardResponse(BaseModel):
