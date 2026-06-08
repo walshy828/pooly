@@ -1,6 +1,7 @@
 """Journal-related models: entries, measurements, chemicals, maintenance, observations, quick status."""
 
 from datetime import datetime
+from typing import Optional
 from sqlalchemy import (
     Integer, String, Float, Text, DateTime, ForeignKey, JSON,
     func,
@@ -105,5 +106,6 @@ class QuickStatus(Base):
     journal_entry_id: Mapped[int] = mapped_column(ForeignKey("journal_entries.id", ondelete="CASCADE"))
     logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     status_type: Mapped[str] = mapped_column(String(50))  # clear_water, clean_skimmer, robot_run, vacuumed, basket_emptied
+    fullness: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-100% for basket tasks
 
     journal_entry: Mapped["JournalEntry"] = relationship(back_populates="quick_statuses")

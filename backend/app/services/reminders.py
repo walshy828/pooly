@@ -64,6 +64,35 @@ async def update_schedule_completion(db: AsyncSession, task_type: str, completed
         await db.commit()
 
 
+BASKET_TASKS = {"clean_skimmer", "empty_basket"}
+BASKET_STATUS_TYPES = {"clean_skimmer": "clean_skimmer", "empty_basket": "basket_emptied"}
+
+
+def _suggest_interval(base_days: int, last_fullness: int | None) -> int | None:
+    """Return a suggested interval in days based on how full the basket was."""
+    if last_fullness is None:
+        return None
+    if last_fullness >= 75:
+        return max(2, round(base_days * 0.5))
+    if last_fullness >= 50:
+        return max(2, round(base_days * 0.75))
+    if last_fullness <= 25:
+        return min(base_days * 2, 21)
+    return None  # 26-49%: on schedule, no suggestion needed
+
+
+async def _get_last_basket_fullness(db: AsyncSession, status_type: str) -> int | None:
+    """Return the fullness value from the most recent basket QuickStatus, if recorded."""
+    res = await db.execute(
+        select(QuickStatus.fullness)
+        .where(QuickStatus.status_type == status_type)
+        .where(QuickStatus.fullness.isnot(None))
+        .order_by(QuickStatus.logged_at.desc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
 async def compute_reminders(db: AsyncSession) -> list[dict]:
     """Compute all maintenance reminders with their urgency levels."""
     result = await db.execute(
@@ -101,6 +130,14 @@ async def compute_reminders(db: AsyncSession) -> list[dict]:
         elif urgency == "due_soon":
             recommendation = f"Due tomorrow or today."
 
+        # For basket tasks, query last fullness and compute a suggested interval
+        last_fullness = None
+        suggested_interval_days = None
+        if sched.task_type in BASKET_TASKS:
+            status_type = BASKET_STATUS_TYPES[sched.task_type]
+            last_fullness = await _get_last_basket_fullness(db, status_type)
+            suggested_interval_days = _suggest_interval(sched.interval_days, last_fullness)
+
         reminders.append({
             "task_type": sched.task_type,
             "display_name": sched.display_name,
@@ -110,6 +147,8 @@ async def compute_reminders(db: AsyncSession) -> list[dict]:
             "interval_days": sched.interval_days,
             "last_completed": sched.last_completed,
             "recommendation": recommendation,
+            "last_fullness": last_fullness,
+            "suggested_interval_days": suggested_interval_days,
         })
 
     # Sort: urgent first, then overdue, due_soon, good

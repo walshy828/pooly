@@ -158,7 +158,6 @@
 
 /* Reminders — swipe-to-action cards */
 .reminder-item {
-  position: relative; overflow: hidden;
   border-radius: var(--radius-md);
   margin-bottom: var(--space-sm);
   background: var(--bg-card);
@@ -168,10 +167,11 @@
 }
 .reminder-item:hover { border-color: var(--border-medium); }
 
-/* Slide track — holds the content row + hidden action buttons */
+/* Slide track — clips the sliding action panel, does NOT clip the inline form */
 .reminder-track {
+  position: relative;
+  overflow: hidden;
   display: flex;
-  transition: transform 0.25s ease;
   width: 100%;
 }
 
@@ -194,6 +194,11 @@
 }
 .reminder-item.actions-open .reminder-main {
   opacity: 0.4;
+}
+
+/* Inline log form container — lives below .reminder-track in normal flow */
+.reminder-form-wrap {
+  border-top: 1px solid var(--border-subtle);
 }
 
 .reminder-action-btn {
@@ -252,11 +257,10 @@
   background: var(--color-accent);
 }
 
-/* Inline quick-log form (replaces Done/Skip when user taps Done on a direct task) */
+/* Inline quick-log form */
 .reminder-log-form {
   padding: var(--space-md);
   background: var(--bg-elevated);
-  border-top: 1px solid var(--border-subtle);
   animation: slideDown 0.2s ease;
 }
 @keyframes slideDown {
@@ -353,6 +357,52 @@
   font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
   cursor: pointer;
+}
+
+/* Basket fullness picker */
+.log-fullness-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+.log-fullness-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  flex: 1;
+}
+.log-fullness-btn {
+  flex: 1;
+  min-width: 52px;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-family: var(--font-family);
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition-fast);
+}
+.log-fullness-btn:hover { border-color: var(--border-medium); }
+.log-fullness-btn.active {
+  border-color: var(--color-warning, #f39c12);
+  background: rgba(243, 156, 18, 0.15);
+  color: var(--color-warning, #f39c12);
+  font-weight: var(--fw-semibold);
+}
+.log-fullness-btn[data-fullness="100"].active {
+  border-color: var(--color-danger);
+  background: rgba(231, 76, 60, 0.15);
+  color: var(--color-danger);
+}
+.log-fullness-btn[data-fullness="0"].active {
+  border-color: var(--color-success);
+  background: rgba(46, 204, 113, 0.15);
+  color: var(--color-success);
 }
 
 /* Weather section */

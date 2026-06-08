@@ -44,6 +44,7 @@ class PoolObservationResponse(BaseModel):
 class QuickStatusCreate(BaseModel):
     status_type: str  # clear_water, clean_skimmer, robot_run, vacuumed, basket_emptied
     entry_date: Optional[datetime] = None
+    fullness: Optional[int] = None  # 0-100 for basket tasks
 
 
 class QuickStatusResponse(BaseModel):
@@ -51,6 +52,7 @@ class QuickStatusResponse(BaseModel):
     journal_entry_id: int
     logged_at: datetime
     status_type: str
+    fullness: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -126,6 +126,13 @@ def get_chemistry_status(parameter: str, value: Optional[float]) -> dict:
     }
 
 
+def _fmt_oz(oz: float) -> str:
+    """Format oz amount, converting to lbs if large enough."""
+    if oz >= 32:
+        return f"{oz / 16:.1f} lbs"
+    return f"{round(oz)} oz"
+
+
 def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dict]:
     """Generate chemistry correction recommendations based on a measurement.
 
@@ -142,33 +149,48 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
     ph = measurement.get("ph")
     if ph is not None:
         if ph < 7.2:
+            # Soda ash: ~6 oz per 10,000 gal raises pH 0.2 points → 30 oz per point
+            delta = 7.4 - ph
+            oz_needed = 30 * delta * volume_factor
             recs.append({
                 "category": "pH Low",
-                "message": f"pH is low ({ph}). Add pH Increaser (Soda Ash) — approximately {6 * volume_factor:.0f} oz to raise ~0.2 points.",
-                "severity": "warning",
+                "message": f"pH is {ph} (target 7.4). Add approximately {_fmt_oz(oz_needed)} of pH Increaser (Soda Ash).",
+                "severity": "critical" if ph < 6.8 else "warning",
                 "icon": "⬆️",
             })
         elif ph > 7.6:
+            # Muriatic acid: ~6 oz per 10,000 gal lowers pH 0.2 points → 30 oz per point
+            delta = ph - 7.4
+            oz_needed = 30 * delta * volume_factor
             recs.append({
                 "category": "pH High",
-                "message": f"pH is high ({ph}). Add pH Decreaser (Muriatic Acid) — approximately {6 * volume_factor:.0f} oz to lower ~0.2 points.",
-                "severity": "warning",
+                "message": f"pH is {ph} (target 7.4). Add approximately {_fmt_oz(oz_needed)} of pH Decreaser (Muriatic Acid).",
+                "severity": "critical" if ph > 8.0 else "warning",
                 "icon": "⬇️",
             })
 
     fc = measurement.get("free_chlorine")
     if fc is not None:
         if fc < 1.0:
+            # Liquid chlorine (10%): ~10 oz per 10,000 gal raises 1 ppm
+            # Granular (Cal-Hypo 68%): ~2 oz per 10,000 gal raises 1 ppm
+            delta = 3.0 - fc
+            oz_liquid = 10 * delta * volume_factor
+            oz_granular = 2 * delta * volume_factor
             recs.append({
                 "category": "Low Chlorine",
-                "message": f"Free Chlorine is low ({fc} ppm). Pool may be under-sanitized. Add chlorine immediately.",
+                "message": (
+                    f"Free Chlorine is {fc} ppm (target 3 ppm). Add approximately "
+                    f"{_fmt_oz(oz_liquid)} liquid chlorine (10%) "
+                    f"or {_fmt_oz(oz_granular)} granular (Cal-Hypo 68%)."
+                ),
                 "severity": "critical",
                 "icon": "🧪",
             })
         elif fc > 5.0:
             recs.append({
                 "category": "High Chlorine",
-                "message": f"Free Chlorine is high ({fc} ppm). Avoid swimming until it drops below 5 ppm.",
+                "message": f"Free Chlorine is {fc} ppm. Avoid swimming until it drops below 5 ppm. Wait or dilute with fresh water.",
                 "severity": "warning",
                 "icon": "⚠️",
             })
@@ -176,17 +198,22 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
     alk = measurement.get("alkalinity")
     if alk is not None:
         if alk < 80:
-            lbs_needed = 1.5 * volume_factor * ((80 - alk) / 10)
+            # Baking soda: 1.5 lbs per 10,000 gal raises alkalinity 10 ppm
+            delta = 100 - alk
+            lbs_needed = 1.5 * (delta / 10) * volume_factor
             recs.append({
                 "category": "Low Alkalinity",
-                "message": f"Alkalinity is low ({alk} ppm). Add Alkalinity Increaser (Baking Soda) — approximately {lbs_needed:.1f} lbs.",
+                "message": f"Alkalinity is {alk} ppm (target 100 ppm). Add approximately {lbs_needed:.1f} lbs of Alkalinity Increaser (Baking Soda).",
                 "severity": "warning",
                 "icon": "⬆️",
             })
         elif alk > 120:
+            # Muriatic acid: ~26 oz per 10,000 gal lowers alkalinity 10 ppm
+            delta = alk - 100
+            oz_acid = 26 * (delta / 10) * volume_factor
             recs.append({
                 "category": "High Alkalinity",
-                "message": f"Alkalinity is high ({alk} ppm). Add Muriatic Acid to lower it. Adjust pH first.",
+                "message": f"Alkalinity is {alk} ppm (target 100 ppm). Add approximately {_fmt_oz(oz_acid)} of Muriatic Acid. Adjust pH first.",
                 "severity": "info",
                 "icon": "⬇️",
             })
@@ -194,16 +221,19 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
     cya = measurement.get("cyanuric_acid")
     if cya is not None:
         if cya < 30:
+            # CYA stabilizer: ~13 oz per 10,000 gal raises CYA 10 ppm
+            delta = 40 - cya
+            oz_needed = 13 * (delta / 10) * volume_factor
             recs.append({
                 "category": "Low Stabilizer",
-                "message": f"Cyanuric Acid is low ({cya} ppm). Add CYA (Stabilizer) — chlorine is degrading quickly in sunlight.",
+                "message": f"Cyanuric Acid is {cya} ppm (target 40 ppm). Add approximately {_fmt_oz(oz_needed)} of CYA Stabilizer. Chlorine is degrading quickly in sunlight.",
                 "severity": "warning",
                 "icon": "☀️",
             })
         elif cya > 50:
             recs.append({
                 "category": "High Stabilizer",
-                "message": f"Cyanuric Acid is high ({cya} ppm). Consider partial water replacement to dilute.",
+                "message": f"Cyanuric Acid is {cya} ppm (ideal 30–50 ppm). Consider partial water replacement to dilute.",
                 "severity": "info" if cya <= 100 else "warning",
                 "icon": "💧",
             })
@@ -211,16 +241,19 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
     ch = measurement.get("calcium_hardness")
     if ch is not None:
         if ch < 200:
+            # Calcium chloride: 1.25 lbs per 10,000 gal raises hardness 10 ppm
+            delta = 300 - ch
+            lbs_needed = 1.25 * (delta / 10) * volume_factor
             recs.append({
                 "category": "Low Hardness",
-                "message": f"Calcium Hardness is low ({ch} ppm). Add Calcium Hardness Increaser to prevent corrosion.",
+                "message": f"Calcium Hardness is {ch} ppm (target 300 ppm). Add approximately {lbs_needed:.1f} lbs of Calcium Hardness Increaser to prevent corrosion.",
                 "severity": "info",
                 "icon": "⬆️",
             })
         elif ch > 400:
             recs.append({
                 "category": "High Hardness",
-                "message": f"Calcium Hardness is high ({ch} ppm). Dilute with fresh water to prevent scaling.",
+                "message": f"Calcium Hardness is {ch} ppm (ideal 200–400 ppm). Dilute with fresh water to prevent scaling.",
                 "severity": "warning",
                 "icon": "💧",
             })
@@ -230,9 +263,11 @@ def get_recommendations(measurement: dict, pool_volume: int = 17000) -> list[dic
     if tc is not None and fc is not None:
         combined = tc - fc
         if combined > 0.5:
+            # Shock (Cal-Hypo 68%): ~1 lb per 10,000 gal raises chlorine ~7 ppm
+            shock_lbs = round(volume_factor, 1)
             recs.append({
                 "category": "High Combined Chlorine",
-                "message": f"Combined chlorine is {combined:.1f} ppm (should be < 0.5). Consider shocking the pool to break down chloramines.",
+                "message": f"Combined chlorine is {combined:.1f} ppm (should be < 0.5). Shock the pool with approximately {shock_lbs} lbs of shock treatment to break down chloramines.",
                 "severity": "warning",
                 "icon": "⚡",
             })

@@ -422,7 +422,7 @@ const DashboardPage = {
     check_cya:    { tab: 'test' },
   },
 
-  async _logDirectTask(taskType, entryDate, notes) {
+  async _logDirectTask(taskType, entryDate, notes, fullness = null) {
     const maintTasks = new Set(['clean_cartridge', 'add_water', 'backwash', 'brush_walls']);
     const statusMap  = { clean_skimmer: 'clean_skimmer', robot_run: 'robot_run', vacuum: 'vacuumed', empty_basket: 'basket_emptied' };
     const datePayload = entryDate ? { entry_date: entryDate } : {};
@@ -430,15 +430,27 @@ const DashboardPage = {
     if (maintTasks.has(taskType)) {
       await API.addMaintenance({ action_type: taskType, ...datePayload, ...notePayload });
     } else if (statusMap[taskType]) {
-      await API.addQuickStatus({ status_type: statusMap[taskType], ...datePayload });
+      const fullnessPayload = fullness != null ? { fullness } : {};
+      await API.addQuickStatus({ status_type: statusMap[taskType], ...datePayload, ...fullnessPayload });
       if (notes) await API.addNote(notes, entryDate || null);
     } else {
       throw new Error(`Unknown task type: ${taskType}`);
     }
   },
 
-  _buildLogForm(taskType, displayName) {
+  _buildLogForm(taskType, displayName, isBasketTask = false) {
     const today = new Date().toISOString().split('T')[0];
+    const fullnessRow = isBasketTask ? `
+      <div class="log-fullness-row">
+        <span class="log-when-label">How full?</span>
+        <div class="log-fullness-btns">
+          <button class="log-fullness-btn" data-fullness="0">Empty</button>
+          <button class="log-fullness-btn" data-fullness="25">¼ Full</button>
+          <button class="log-fullness-btn" data-fullness="50">½ Full</button>
+          <button class="log-fullness-btn" data-fullness="75">¾ Full</button>
+          <button class="log-fullness-btn" data-fullness="100">Full</button>
+        </div>
+      </div>` : '';
     return `<div class="reminder-log-form">
       <div class="log-when-row">
         <span class="log-when-label">When?</span>
@@ -451,6 +463,7 @@ const DashboardPage = {
         </div>
         <input type="date" class="log-date-input" value="${today}" max="${today}">
       </div>
+      ${fullnessRow}
       <textarea class="log-note-textarea" placeholder="Notes (optional)…" rows="2"></textarea>
       <div class="log-form-btns">
         <button class="log-cancel">Cancel</button>
@@ -468,31 +481,39 @@ const DashboardPage = {
       const badgeText = r.urgency === 'good' ? '✓ Good'
         : r.urgency === 'due_soon' ? 'Due Soon'
         : r.urgency === 'overdue' ? 'Overdue' : '⚠ Urgent';
-      const detail = r.days_since != null
+      let detail = r.days_since != null
         ? `${r.days_since}d ago · every ${r.interval_days}d`
         : `Every ${r.interval_days}d · never done`;
+      if (r.suggested_interval_days) {
+        const arrow = r.suggested_interval_days < r.interval_days ? '↑' : '↓';
+        detail += ` · ${arrow} try every ${r.suggested_interval_days}d`;
+      }
       const isFormTask = !!this._FORM_TASKS[r.task_type];
       const doneLabel = isFormTask ? '→ Log Now' : 'Done';
       const doneTip = isFormTask ? 'Opens the entry form' : 'Tap to log with date options';
+      const isBasketTask = r.task_type === 'clean_skimmer' || r.task_type === 'empty_basket';
       return `
         <div class="reminder-item reminder-urgency-${r.urgency}" data-task="${r.task_type}">
-          <div class="reminder-main" title="Tap to reveal actions">
-            <div class="reminder-icon reminder-urgency-${r.urgency}">${r.icon}</div>
-            <div class="reminder-info">
-              <div class="reminder-name">${r.display_name}</div>
-              <div class="reminder-detail">${detail}</div>
+          <div class="reminder-track">
+            <div class="reminder-main" title="Tap to reveal actions">
+              <div class="reminder-icon reminder-urgency-${r.urgency}">${r.icon}</div>
+              <div class="reminder-info">
+                <div class="reminder-name">${r.display_name}</div>
+                <div class="reminder-detail">${detail}</div>
+              </div>
+              <span class="badge ${badgeClass}">${badgeText}</span>
+              <span style="color:var(--text-muted);font-size:var(--fs-xs);margin-left:4px">›</span>
             </div>
-            <span class="badge ${badgeClass}">${badgeText}</span>
-            <span style="color:var(--text-muted);font-size:var(--fs-xs);margin-left:4px">›</span>
-          </div>
-          <div class="reminder-actions">
-            <button class="reminder-action-btn reminder-action-done" data-done="${r.task_type}"
-              data-name="${r.display_name}" data-form-task="${isFormTask}" title="${doneTip}">
-              <span class="action-icon">${isFormTask ? '📋' : '✅'}</span>${doneLabel}
-            </button>
-            <button class="reminder-action-btn reminder-action-skip" data-skip="${r.task_type}">
-              <span class="action-icon">⏭</span>Skip
-            </button>
+            <div class="reminder-actions">
+              <button class="reminder-action-btn reminder-action-done" data-done="${r.task_type}"
+                data-name="${r.display_name}" data-form-task="${isFormTask}"
+                data-basket-task="${isBasketTask}" title="${doneTip}">
+                <span class="action-icon">${isFormTask ? '📋' : '✅'}</span>${doneLabel}
+              </button>
+              <button class="reminder-action-btn reminder-action-skip" data-skip="${r.task_type}">
+                <span class="action-icon">⏭</span>Skip
+              </button>
+            </div>
           </div>
         </div>`;
     }).join('');
@@ -522,69 +543,76 @@ const DashboardPage = {
     document.querySelectorAll('[data-done]').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
-        const taskType  = btn.dataset.done;
-        const name      = btn.dataset.name || taskType;
-        const isForm    = btn.dataset.formTask === 'true';
-        const item      = btn.closest('.reminder-item');
-        const actionsEl = item.querySelector('.reminder-actions');
+        const taskType    = btn.dataset.done;
+        const name        = btn.dataset.name || taskType;
+        const isForm      = btn.dataset.formTask === 'true';
+        const isBasket    = btn.dataset.basketTask === 'true';
+        const item        = btn.closest('.reminder-item');
 
         if (isForm) {
           const cfg = this._FORM_TASKS[taskType];
           if (cfg.preselect) QuickEntryPage.selectedChemical = cfg.preselect;
           QuickEntryPage.pendingReminder = { task_type: taskType, display_name: name };
           App.navigate('quick-entry', { tab: cfg.tab });
-        } else {
-          actionsEl.innerHTML = this._buildLogForm(taskType, name);
-          const form = actionsEl.querySelector('.reminder-log-form');
-
-          form.querySelectorAll('.log-preset').forEach(p => {
-            p.addEventListener('click', () => {
-              form.querySelectorAll('.log-preset').forEach(x => x.classList.remove('active'));
-              p.classList.add('active');
-              const days = parseInt(p.dataset.days);
-              const dateInput = form.querySelector('.log-date-input');
-              if (days === -1) {
-                dateInput.style.display = 'block';
-                dateInput.focus();
-              } else {
-                dateInput.style.display = 'none';
-                const d = new Date();
-                d.setDate(d.getDate() - days);
-                dateInput.value = d.toISOString().split('T')[0];
-              }
-            });
-          });
-
-          form.querySelector('.log-cancel').addEventListener('click', e => {
-            e.stopPropagation();
-            actionsEl.innerHTML = `
-              <button class="reminder-action-btn reminder-action-done" data-done="${taskType}"
-                data-name="${name}" data-form-task="false">
-                <span class="action-icon">✅</span>Done
-              </button>
-              <button class="reminder-action-btn reminder-action-skip" data-skip="${taskType}">
-                <span class="action-icon">⏭</span>Skip
-              </button>`;
-            this._rebindActionsEl(actionsEl, item);
-          });
-
-          form.querySelector('.log-confirm').addEventListener('click', async e => {
-            e.stopPropagation();
-            try {
-              const dateInput = form.querySelector('.log-date-input');
-              const today = new Date().toISOString().split('T')[0];
-              const entryDate = (dateInput.value && dateInput.value !== today)
-                ? new Date(dateInput.value + 'T12:00:00').toISOString()
-                : null;
-              const notes = form.querySelector('.log-note-textarea')?.value?.trim() || null;
-              await this._logDirectTask(taskType, entryDate, notes);
-              item.classList.remove('actions-open');
-              item.classList.add('completing');
-              Toast.success(`${name} logged! ✅`);
-              setTimeout(() => item.remove(), 400);
-            } catch (err) { Toast.error('Failed: ' + err.message); }
-          });
+          return;
         }
+
+        // Close slide-out actions and show inline form below the track
+        item.classList.remove('actions-open');
+        item.querySelector('.reminder-form-wrap')?.remove();
+        const wrap = document.createElement('div');
+        wrap.className = 'reminder-form-wrap';
+        wrap.innerHTML = this._buildLogForm(taskType, name, isBasket);
+        item.appendChild(wrap);
+        const form = wrap.querySelector('.reminder-log-form');
+
+        form.querySelectorAll('.log-preset').forEach(p => {
+          p.addEventListener('click', () => {
+            form.querySelectorAll('.log-preset').forEach(x => x.classList.remove('active'));
+            p.classList.add('active');
+            const days = parseInt(p.dataset.days);
+            const dateInput = form.querySelector('.log-date-input');
+            if (days === -1) {
+              dateInput.style.display = 'block';
+              dateInput.focus();
+            } else {
+              dateInput.style.display = 'none';
+              const d = new Date();
+              d.setDate(d.getDate() - days);
+              dateInput.value = d.toISOString().split('T')[0];
+            }
+          });
+        });
+
+        form.querySelectorAll('.log-fullness-btn').forEach(fb => {
+          fb.addEventListener('click', () => {
+            form.querySelectorAll('.log-fullness-btn').forEach(x => x.classList.remove('active'));
+            fb.classList.add('active');
+          });
+        });
+
+        form.querySelector('.log-cancel').addEventListener('click', e => {
+          e.stopPropagation();
+          wrap.remove();
+        });
+
+        form.querySelector('.log-confirm').addEventListener('click', async e => {
+          e.stopPropagation();
+          try {
+            const dateInput = form.querySelector('.log-date-input');
+            const today = new Date().toISOString().split('T')[0];
+            const entryDate = (dateInput.value && dateInput.value !== today)
+              ? new Date(dateInput.value + 'T12:00:00').toISOString()
+              : null;
+            const notes = form.querySelector('.log-note-textarea')?.value?.trim() || null;
+            const activeFullness = form.querySelector('.log-fullness-btn.active');
+            const fullness = activeFullness ? parseInt(activeFullness.dataset.fullness) : null;
+            await this._logDirectTask(taskType, entryDate, notes, fullness);
+            item.classList.add('completing');
+            Toast.success(`${name} logged! ✅`);
+            setTimeout(() => item.remove(), 400);
+          } catch (err) { Toast.error('Failed: ' + err.message); }
+        });
       });
     });
 
@@ -615,24 +643,6 @@ const DashboardPage = {
           item.classList.remove('actions-open');
         }
       }, { passive: true });
-    });
-  },
-
-  _rebindActionsEl(actionsEl, item) {
-    actionsEl.querySelector('[data-done]')?.addEventListener('click', async e => {
-      e.stopPropagation();
-      const btn = e.currentTarget;
-      actionsEl.innerHTML = this._buildLogForm(btn.dataset.done, btn.dataset.name || btn.dataset.done);
-    });
-    actionsEl.querySelector('[data-skip]')?.addEventListener('click', async e => {
-      e.stopPropagation();
-      const taskType = e.currentTarget.dataset.skip;
-      try {
-        await API.dismissMaintenance(taskType);
-        item.classList.add('dismissing');
-        Toast.info('Reminder snoozed ⏭');
-        setTimeout(() => item.remove(), 300);
-      } catch (err) { Toast.error('Failed: ' + err.message); }
     });
   },
 

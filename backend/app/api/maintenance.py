@@ -92,7 +92,8 @@ async def add_quick_status(data: QuickStatusCreate, db: AsyncSession = Depends(g
     await db.flush()
 
     qs = QuickStatus(
-        journal_entry_id=entry.id, logged_at=entry_dt, status_type=data.status_type,
+        journal_entry_id=entry.id, logged_at=entry_dt,
+        status_type=data.status_type, fullness=data.fullness,
     )
     db.add(qs)
     await db.flush()
