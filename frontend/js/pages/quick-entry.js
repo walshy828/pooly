@@ -2,6 +2,7 @@
 const QuickEntryPage = {
   activeTab: 'test',
   measurementValues: {},
+  lastMeasurements: {},   // last known test values, fetched on render for slider defaults
   selectedChemical: null,
   chemForm: 'tabs',
   chemAmount: 1,
@@ -24,15 +25,24 @@ const QuickEntryPage = {
 
   async render(container) {
     this.measurementValues = {};
+    this.lastMeasurements = {};
     this.completedStatuses = new Set();
     this.panelNotes = {};
     this.entryDate = null;
     this.poolStatus = 'open';
 
     try {
-      const data = await API.getSettings();
-      this.poolStatus = data.pool_status;
-    } catch (err) { console.error('Failed to fetch pool status', err); }
+      const [settingsData, dashData] = await Promise.all([
+        API.getSettings(),
+        API.getDashboard().catch(() => null),
+      ]);
+      this.poolStatus = settingsData.pool_status;
+      if (dashData?.chemistry) {
+        dashData.chemistry.forEach(c => {
+          if (c.value != null) this.lastMeasurements[c.parameter] = c.value;
+        });
+      }
+    } catch (err) { console.error('Failed to fetch initial data', err); }
 
     container.innerHTML = `
       <div class="page-header">
@@ -175,8 +185,9 @@ const QuickEntryPage = {
     let html = this.renderPendingReminderBanner();
     html += this.renderDateSelector();
     html += this.renderHealthSlider();
-    const params = ['total_chlorine', 'free_chlorine', 'bromine', 'alkalinity', 'cyanuric_acid', 'ph'];
-    params.forEach(param => { html += this.renderMeasurementGroup(param); });
+    html += `<div class="section-title" style="margin-bottom:var(--space-md)">Water Chemistry</div>`;
+    const params = ['free_chlorine', 'total_chlorine', 'bromine', 'ph', 'alkalinity', 'cyanuric_acid'];
+    params.forEach(param => { html += this.renderMeasurementSlider(param); });
     html += this.renderNotesSection('test');
     html += `<div class="submit-area"><button class="btn btn-primary btn-block btn-lg" id="submitMeasurement">💾 Save Reading</button></div>`;
     return html;
@@ -198,64 +209,179 @@ const QuickEntryPage = {
     </div>`;
   },
 
-  renderMeasurementGroup(param) {
+  renderMeasurementSlider(param) {
     const spec = Chemistry.ranges[param];
     if (!spec) return '';
-    const selected = this.measurementValues[param];
-    const chips = spec.options.map((val, i) => {
-      const bg = spec.colors[i];
-      const sel = selected === val ? ' selected' : '';
-      return `<button class="meas-chip${sel}" data-param="${param}" data-value="${val}" style="background:${bg};--chip-glow:${bg}">${val}</button>`;
-    }).join('');
-    const selDisplay = selected != null ? `Selected: ${selected}${spec.unit ? ' ' + spec.unit : ''}` : '';
-    return `<div class="measurement-group">
-      <div class="measurement-label">${spec.label} <span class="measurement-unit">${spec.unit}</span></div>
-      <div class="measurement-chips">${chips}</div>
-      ${this.renderIdealRangeBar(spec)}
-      <div class="selected-value-display" id="sel-${param}">${selDisplay}</div>
-    </div>`;
+    const N = spec.options.length;
+
+    // Priority: user-set value > last measurement > not tested (-1)
+    const currentVal = this.measurementValues[param];
+    const lastVal = this.lastMeasurements[param];
+    const initVal = currentVal ?? lastVal ?? null;
+    const initIdx = initVal != null ? this._valueToSliderIdx(param, initVal) : -1;
+
+    const isNotTested = initIdx < 0;
+    const badgeColor = isNotTested ? null : spec.colors[initIdx];
+    const badgeLabel = isNotTested ? 'Not Tested' : spec.colorLabels[initIdx];
+    const unitStr = spec.unit ? ` ${spec.unit}` : '';
+    const badgeNum = isNotTested ? '—' : `${spec.options[initIdx]}${unitStr}`;
+
+    const gradient = this._buildTrackGradient(spec);
+
+    // Last-value marker position on the track (0–100%)
+    let lastMarkerHtml = '';
+    if (lastVal != null) {
+      const lastIdx = this._valueToSliderIdx(param, lastVal);
+      const pct = ((lastIdx + 1) / N * 100).toFixed(1);
+      lastMarkerHtml = `<div class="meas-last-marker" style="left:${pct}%"></div>`;
+    }
+
+    const lastText = lastVal != null ? `Last: ${lastVal}${unitStr}` : 'No prior reading';
+
+    // Abbreviated tick labels (N+1 total: "Clear" + N color labels)
+    const ticks = ['<span class="meas-tick meas-tick-clear">✕<br>Clear</span>'];
+    spec.colorLabels.forEach((lbl, i) => {
+      const short = this._abbrevLabel(lbl);
+      ticks.push(`<span class="meas-tick" style="color:${spec.colors[i]}">${short}</span>`);
+    });
+
+    const idealInfo = spec.idealLow != null && spec.idealHigh != null
+      ? `<div class="meas-ideal-info">✓ Ideal: ${spec.idealLow}–${spec.idealHigh}${unitStr}</div>`
+      : '';
+
+    const badgeBorderColor = badgeColor || 'rgba(255,255,255,0.06)';
+    const badgeBgColor = badgeColor ? this._hexToRgba(badgeColor, 0.12) : 'rgba(0,0,0,0.25)';
+    const numColor = badgeColor || 'var(--text-muted)';
+
+    return `
+<div class="meas-slider-group" data-param="${param}">
+  <div class="meas-slider-header">
+    <span class="meas-slider-label">${spec.label}${spec.unit ? ` <span class="meas-unit">(${spec.unit})</span>` : ''}</span>
+    <span class="meas-last-text" id="lasttext-${param}">${lastText}</span>
+  </div>
+  <div class="meas-value-display${isNotTested ? ' not-tested' : ''}" id="badge-${param}"
+       style="border-color:${badgeBorderColor};background:${badgeBgColor}">
+    <span class="meas-val-number" id="valnum-${param}" style="color:${numColor}">${badgeNum}</span>
+    <span class="meas-val-tag" id="vallbl-${param}" style="color:${numColor}">${badgeLabel}</span>
+  </div>
+  <div class="meas-slider-wrap">
+    <div class="meas-track-bg" style="background:${gradient}"></div>
+    ${lastMarkerHtml}
+    <input type="range" class="meas-slider-input" id="slider-${param}"
+      data-param="${param}" min="-1" max="${N - 1}" step="1" value="${initIdx}"
+      style="--thumb-color:${badgeColor || '#555'}">
+  </div>
+  <div class="meas-tick-row">${ticks.join('')}</div>
+  ${idealInfo}
+</div>`;
   },
 
-  renderIdealRangeBar(spec) {
-    if (spec.idealLow == null || spec.idealHigh == null) return '';
-    const n = spec.options.length;
-    const idealStartIdx = spec.options.findIndex(v => v >= spec.idealLow);
-    let idealEndIdx = -1;
-    spec.options.forEach((v, i) => { if (v <= spec.idealHigh) idealEndIdx = i; });
-    if (idealStartIdx < 0 || idealEndIdx < 0 || idealEndIdx < idealStartIdx) return '';
-    const leftPct  = (idealStartIdx / n * 100).toFixed(1);
-    const widthPct = ((idealEndIdx - idealStartIdx + 1) / n * 100).toFixed(1);
-    return `<div class="ideal-range-bar">
-      <div class="ideal-range-fill" style="left:${leftPct}%;width:${widthPct}%"></div>
-      <div class="ideal-range-label">
-        <span class="ideal-tag">✓ Ideal: ${spec.idealLow}–${spec.idealHigh}${spec.unit ? ' '+spec.unit : ''}</span>
-      </div>
-    </div>`;
+  _abbrevLabel(lbl) {
+    return lbl
+      .replace('Very Low', 'V.Low')
+      .replace('Very High', 'V.High')
+      .replace('Very Soft', 'V.Soft')
+      .replace('Ideal Low', 'Idl-Lo')
+      .replace('Ideal High', 'Idl-Hi')
+      .replace('Low-Ideal', 'Lo-Idl')
+      .replace('Excessive', 'Excess');
+  },
+
+  _buildTrackGradient(spec) {
+    const N = spec.options.length;
+    // N+1 equal slots: first slot is "not tested" (grey), rest are color bands
+    const slotPct = 100 / (N + 1);
+    const stops = [
+      `#222 0%`,
+      `#2e2e2e ${slotPct.toFixed(2)}%`,
+    ];
+    spec.colors.forEach((color, i) => {
+      const s = ((i + 1) * slotPct).toFixed(2);
+      const e = ((i + 2) * slotPct).toFixed(2);
+      stops.push(`${color} ${s}%`, `${color} ${e}%`);
+    });
+    return `linear-gradient(90deg, ${stops.join(', ')})`;
+  },
+
+  _valueToSliderIdx(param, val) {
+    const opts = Chemistry.ranges[param].options;
+    let best = 0, bestDiff = Math.abs(val - opts[0]);
+    opts.forEach((o, i) => {
+      const d = Math.abs(val - o);
+      if (d < bestDiff) { bestDiff = d; best = i; }
+    });
+    return best;
+  },
+
+  _hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  },
+
+  _updateSliderBadge(param, idx) {
+    const spec = Chemistry.ranges[param];
+    const badge = document.getElementById(`badge-${param}`);
+    const numEl = document.getElementById(`valnum-${param}`);
+    const lblEl = document.getElementById(`vallbl-${param}`);
+    const sliderEl = document.getElementById(`slider-${param}`);
+    if (!badge || !numEl || !lblEl) return;
+
+    const unitStr = spec.unit ? ` ${spec.unit}` : '';
+
+    if (idx < 0) {
+      badge.classList.add('not-tested');
+      badge.style.borderColor = 'rgba(255,255,255,0.06)';
+      badge.style.background = 'rgba(0,0,0,0.25)';
+      numEl.textContent = '—';
+      numEl.style.color = 'var(--text-muted)';
+      lblEl.textContent = 'Not Tested';
+      lblEl.style.color = 'var(--text-muted)';
+      if (sliderEl) sliderEl.style.setProperty('--thumb-color', '#555');
+    } else {
+      const val = spec.options[idx];
+      const color = spec.colors[idx];
+      const label = spec.colorLabels[idx];
+      badge.classList.remove('not-tested');
+      badge.style.borderColor = color;
+      badge.style.background = this._hexToRgba(color, 0.12);
+      numEl.textContent = `${val}${unitStr}`;
+      numEl.style.color = color;
+      lblEl.textContent = label;
+      lblEl.style.color = color;
+      if (sliderEl) sliderEl.style.setProperty('--thumb-color', color);
+    }
   },
 
   bindTestPanel() {
     this.bindDateSelector();
     this.bindPendingReminderBanner();
 
-    document.querySelectorAll('.meas-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const param = chip.dataset.param;
-        const val = parseFloat(chip.dataset.value);
-        if (this.measurementValues[param] === val) { delete this.measurementValues[param]; }
-        else { this.measurementValues[param] = val; }
-        document.querySelectorAll(`.meas-chip[data-param="${param}"]`).forEach(c => c.classList.remove('selected'));
-        if (this.measurementValues[param] != null) chip.classList.add('selected');
-        const spec = Chemistry.ranges[param];
-        const el = document.getElementById(`sel-${param}`);
-        if (el) el.textContent = this.measurementValues[param] != null
-          ? `Selected: ${this.measurementValues[param]}${spec.unit ? ' ' + spec.unit : ''}` : '';
+    // Initialize measurementValues from rendered slider positions (picks up defaults)
+    document.querySelectorAll('.meas-slider-input').forEach(slider => {
+      const param = slider.dataset.param;
+      const spec = Chemistry.ranges[param];
+      const idx = parseInt(slider.value);
+      if (idx >= 0) {
+        this.measurementValues[param] = spec.options[idx];
+      }
+
+      slider.addEventListener('input', () => {
+        const i = parseInt(slider.value);
+        if (i >= 0) {
+          this.measurementValues[param] = spec.options[i];
+        } else {
+          delete this.measurementValues[param];
+        }
+        this._updateSliderBadge(param, i);
       });
     });
 
-    const slider = document.getElementById('healthSlider');
-    if (slider) {
-      slider.addEventListener('input', () => {
-        this.healthScore = parseInt(slider.value);
+    const healthSlider = document.getElementById('healthSlider');
+    if (healthSlider) {
+      healthSlider.addEventListener('input', () => {
+        this.healthScore = parseInt(healthSlider.value);
         const lbl = document.getElementById('healthLabel');
         if (lbl) lbl.textContent = `${this.healthScore}/10 — ${Chemistry.healthLabels[this.healthScore] || ''}`;
       });

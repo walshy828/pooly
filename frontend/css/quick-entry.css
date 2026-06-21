@@ -53,54 +53,191 @@
   margin-top: var(--space-sm); min-height: 28px;
 }
 
-/* Measurement chips */
-.measurement-group { margin-bottom: var(--space-xl); }
-.measurement-label {
-  font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text-secondary);
-  margin-bottom: var(--space-md); display: flex; justify-content: space-between;
+/* ── Chemistry Measurement Sliders ────────────────────────── */
+.meas-slider-group {
+  margin-bottom: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
 }
-.measurement-unit { font-size: var(--fs-xs); color: var(--text-muted); font-weight: var(--fw-normal); }
-.measurement-chips { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
 
-.meas-chip {
-  min-width: 52px; height: 44px;
-  display: flex; align-items: center; justify-content: center;
+.meas-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-md);
+  gap: var(--space-sm);
+}
+
+.meas-slider-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.meas-unit {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-normal);
+  color: var(--text-muted);
+}
+
+.meas-last-text {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Value badge — large display above the slider */
+.meas-value-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-md);
-  font-size: var(--fs-sm); font-weight: var(--fw-bold);
-  cursor: pointer; transition: all var(--transition-spring);
-  border: 2px solid transparent; color: #fff;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  border: 2px solid rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.25);
+  margin-bottom: var(--space-lg);
+  min-height: 68px;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.meas-val-number {
+  font-size: var(--fs-2xl);
+  font-weight: var(--fw-bold);
+  line-height: 1.1;
+  color: var(--text-muted);
+  transition: color 150ms ease;
+  letter-spacing: -0.5px;
+}
+
+.meas-val-tag {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 3px;
+  color: var(--text-muted);
+  transition: color 150ms ease;
+}
+
+/* Slider track container */
+.meas-slider-wrap {
+  position: relative;
+  height: 52px;
+  margin-bottom: var(--space-sm);
+}
+
+/* Color gradient track background */
+.meas-track-bg {
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%; transform: translateY(-50%);
+  height: 28px;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Thin white marker showing the last recorded value */
+.meas-last-marker {
+  position: absolute;
+  top: 50%; transform: translate(-50%, -50%);
+  width: 3px; height: 36px;
+  background: rgba(255,255,255,0.55);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 3;
+  box-shadow: 0 0 4px rgba(0,0,0,0.5);
+}
+
+/* Range input — transparent track, custom thumb */
+.meas-slider-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: grab;
+  z-index: 4;
+  --thumb-color: #555;
   -webkit-tap-highlight-color: transparent;
-  font-family: var(--font-family); flex: 1;
-}
-.meas-chip:hover { transform: scale(1.05); z-index: 1; }
-.meas-chip.selected {
-  transform: scale(1.12); border-color: #fff;
-  box-shadow: 0 0 20px var(--chip-glow, rgba(255,255,255,0.3)), 0 4px 12px rgba(0,0,0,0.3);
-  z-index: 2;
 }
 
-.selected-value-display {
-  font-size: var(--fs-xs); color: var(--text-accent); text-align: right;
-  min-height: 18px; margin-top: var(--space-xs);
+.meas-slider-input::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+  border-radius: var(--radius-sm);
 }
 
-/* Green zone ideal range indicator — aligned to chip positions via JS index math */
-.ideal-range-bar {
-  position: relative; height: 6px; border-radius: 3px;
-  background: var(--bg-input); margin-top: var(--space-sm); overflow: visible;
+.meas-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 30px;
+  height: 52px;
+  border-radius: 8px;
+  background: rgba(232, 244, 248, 0.95);
+  border: 3px solid var(--thumb-color);
+  box-shadow: 0 0 14px var(--thumb-color), 0 2px 8px rgba(0,0,0,0.5);
+  cursor: grab;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
 }
-.ideal-range-fill {
-  position: absolute; height: 100%; border-radius: 3px;
-  background: linear-gradient(90deg, rgba(46,204,113,0.4), rgba(46,204,113,0.85), rgba(46,204,113,0.4));
-  box-shadow: 0 0 10px rgba(46,204,113,0.35);
+
+.meas-slider-input::-moz-range-track {
+  height: 28px;
+  background: transparent;
+  border-radius: var(--radius-sm);
 }
-.ideal-range-label {
-  display: flex; justify-content: center; margin-top: 4px;
+
+.meas-slider-input::-moz-range-thumb {
+  width: 30px;
+  height: 52px;
+  border-radius: 8px;
+  background: rgba(232, 244, 248, 0.95);
+  border: 3px solid var(--thumb-color);
+  box-shadow: 0 0 14px var(--thumb-color), 0 2px 8px rgba(0,0,0,0.5);
+  cursor: grab;
 }
-.ideal-tag {
-  font-size: var(--fs-xs); font-weight: var(--fw-semibold);
-  color: var(--color-success); letter-spacing: 0.2px;
+
+/* Tick labels */
+.meas-tick-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+  margin-bottom: var(--space-xs);
+}
+
+.meas-tick {
+  flex: 1;
+  text-align: center;
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+  line-height: 1.25;
+  overflow: hidden;
+}
+
+.meas-tick-clear {
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-size: 0.65rem;
+  line-height: 1.2;
+}
+
+/* Ideal range text */
+.meas-ideal-info {
+  font-size: var(--fs-xs);
+  color: var(--color-success);
+  font-weight: var(--fw-semibold);
+  text-align: center;
+  margin-top: var(--space-xs);
+  opacity: 0.85;
 }
 
 /* Pending reminder banner — shown when navigated from a dashboard reminder */
