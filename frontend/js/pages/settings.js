@@ -1,9 +1,18 @@
 /** Settings page */
 const SettingsPage = {
+  _inventory: [],
+  _products: {},
+
   async render(container) {
     container.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div></div>`;
     try {
-      const data = await API.getSettings();
+      const [data, inventory, products] = await Promise.all([
+        API.getSettings(),
+        API.getChemicalInventory().catch(() => []),
+        API.getChemicalProducts().catch(() => ({})),
+      ]);
+      this._inventory = inventory;
+      this._products = products;
       container.innerHTML = this.buildHTML(data);
       this.bind(data);
     } catch (err) {
@@ -60,6 +69,8 @@ const SettingsPage = {
           </div>
         </div>
 
+        ${this.renderInventorySection()}
+
         <div class="settings-group">
           <div class="section-title">Pool Care Schedules</div>
           <div style="font-size:var(--fs-xs);color:var(--text-muted);margin-bottom:var(--space-md)">
@@ -87,6 +98,82 @@ const SettingsPage = {
         <div class="settings-group" style="text-align:center;padding:var(--space-xl) 0">
           <div style="color:var(--text-muted);font-size:var(--fs-sm)">Pooly v1.0.0</div>
           <div style="color:var(--text-muted);font-size:var(--fs-xs);margin-top:4px">🏊 Pool Maintenance Manager</div>
+        </div>
+      </div>`;
+  },
+
+  renderInventorySection() {
+    const typeIcons = {
+      shock: '⚡', algaecide: '🦠', clarifier: '✨', ph_up: '⬆️', ph_down: '⬇️',
+      alkalinity_up: '🔼', cya: '☀️', hardness: '💧',
+    };
+    const typeLabels = {
+      shock: 'Shock', algaecide: 'Algaecide', clarifier: 'Clarifier',
+      ph_up: 'pH Up', ph_down: 'pH Down', alkalinity_up: 'Alkalinity Up',
+      cya: 'CYA Stabilizer', hardness: 'Calcium Hardness',
+    };
+    const inventoryByType = {};
+    (this._inventory || []).forEach(item => {
+      const t = item.product_type || 'other';
+      if (!inventoryByType[t]) inventoryByType[t] = [];
+      inventoryByType[t].push(item);
+    });
+
+    const inventoryRows = (this._inventory || []).map(item => `
+      <div class="inv-row" data-inv-id="${item.id}" data-product-id="${item.product_id}">
+        <div class="inv-row-info">
+          <span class="inv-type-icon">${typeIcons[item.product_type] || '🧪'}</span>
+          <div class="inv-row-text">
+            <div class="inv-product-name">${item.product_name || item.product_id}</div>
+            <div class="inv-product-brand" style="color:var(--text-muted);font-size:var(--fs-xs)">${item.product_brand || ''}</div>
+          </div>
+        </div>
+        <div class="inv-row-controls">
+          <input type="number" class="inv-qty-input form-input" value="${item.quantity}" min="0" step="0.5"
+            data-inv-id="${item.id}" style="width:64px;text-align:center;padding:4px">
+          <span style="font-size:var(--fs-xs);color:var(--text-muted)">${item.unit}</span>
+          <button class="inv-remove-btn" data-inv-id="${item.id}" title="Remove">✕</button>
+        </div>
+      </div>`).join('');
+
+    // Build product picker select options grouped by type
+    const optGroups = Object.entries(this._products || {}).map(([typeName, products]) => {
+      const label = typeLabels[typeName] || typeName;
+      const options = (products || []).map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+      return options ? `<optgroup label="${typeIcons[typeName] || ''} ${label}">${options}</optgroup>` : '';
+    }).filter(Boolean).join('');
+
+    return `
+      <div class="settings-group">
+        <div class="section-title">My Chemical Inventory</div>
+        <div style="font-size:var(--fs-xs);color:var(--text-muted);margin-bottom:var(--space-md)">
+          Track what chemicals you have on hand. Treatment plans will use these products and calculate exact amounts.
+        </div>
+        <div class="card" id="inventoryList">
+          ${inventoryRows || `<div style="text-align:center;color:var(--text-muted);padding:var(--space-lg);font-size:var(--fs-sm)">
+            No chemicals added yet. Add what you have on hand below.
+          </div>`}
+        </div>
+        <div class="card" style="margin-top:var(--space-md)">
+          <div class="form-group" style="margin-bottom:var(--space-sm)">
+            <label class="form-label">Add Product</label>
+            <select class="form-select" id="addProductSelect">
+              <option value="">— Select a product —</option>
+              ${optGroups}
+            </select>
+          </div>
+          <div class="inv-add-row">
+            <input type="number" class="form-input" id="addProductQty" placeholder="Qty" min="0" step="0.5" value="1" style="width:70px">
+            <select class="form-select" id="addProductUnit" style="width:100px">
+              <option value="lbs">lbs</option>
+              <option value="gallons">gallons</option>
+              <option value="quarts">quarts</option>
+              <option value="oz">oz</option>
+              <option value="bags">bags</option>
+              <option value="bottles">bottles</option>
+            </select>
+            <button class="btn btn-primary" id="addInventoryBtn" style="flex:1">+ Add</button>
+          </div>
         </div>
       </div>`;
   },
@@ -241,6 +328,106 @@ const SettingsPage = {
           `Every ${intervals[t]} day${intervals[t] !== 1 ? 's' : ''}`;
         await saveSchedule(t);
       });
+    });
+
+    // ── Chemical Inventory ────────────────────────────────────────
+    this._bindInventory();
+  },
+
+  _buildInventoryHTML() {
+    const typeIcons = { shock: '⚡', algaecide: '🦠', clarifier: '✨', ph_up: '⬆️', ph_down: '⬇️', alkalinity_up: '🔼', cya: '☀️', hardness: '💧' };
+    if (!this._inventory.length) {
+      return `<div style="text-align:center;color:var(--text-muted);padding:var(--space-lg);font-size:var(--fs-sm)">No chemicals added yet.</div>`;
+    }
+    return this._inventory.map(item => `
+      <div class="inv-row" data-product-id="${item.product_id}">
+        <div class="inv-row-info">
+          <span class="inv-type-icon">${typeIcons[item.product_type] || '🧪'}</span>
+          <div class="inv-row-text">
+            <div class="inv-product-name">${item.product_name || item.product_id}</div>
+            <div style="color:var(--text-muted);font-size:var(--fs-xs)">${item.product_brand || ''}</div>
+          </div>
+        </div>
+        <div class="inv-row-controls">
+          <input type="number" class="inv-qty-input form-input" value="${item.quantity}" min="0" step="0.5"
+            data-product-id="${item.product_id}" style="width:64px;text-align:center;padding:4px">
+          <span style="font-size:var(--fs-xs);color:var(--text-muted)">${item.unit}</span>
+          <button class="inv-remove-btn" data-product-id="${item.product_id}" title="Remove">✕</button>
+        </div>
+      </div>`).join('');
+  },
+
+  async _saveInventoryToServer() {
+    try {
+      const saved = await API.saveChemicalInventory(this._inventory.map(i => ({
+        product_id: i.product_id,
+        quantity: i.quantity,
+        unit: i.unit,
+      })));
+      this._inventory = saved;
+    } catch (err) { Toast.error('Failed to save inventory: ' + err.message); }
+  },
+
+  _bindInventory() {
+    const listEl = document.getElementById('inventoryList');
+    if (!listEl) return;
+
+    const refresh = () => {
+      listEl.innerHTML = this._buildInventoryHTML();
+      this._bindInventoryRows();
+    };
+    this._bindInventoryRows = () => {
+      listEl.querySelectorAll('.inv-qty-input').forEach(input => {
+        input.addEventListener('change', async () => {
+          const pid = input.dataset.productId;
+          const item = this._inventory.find(i => i.product_id === pid);
+          if (item) { item.quantity = parseFloat(input.value) || 0; }
+          await this._saveInventoryToServer();
+        });
+      });
+      listEl.querySelectorAll('.inv-remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const pid = btn.dataset.productId;
+          this._inventory = this._inventory.filter(i => i.product_id !== pid);
+          await this._saveInventoryToServer();
+          refresh();
+          Toast.success('Chemical removed');
+        });
+      });
+    };
+    this._bindInventoryRows();
+
+    document.getElementById('addInventoryBtn')?.addEventListener('click', async () => {
+      const select = document.getElementById('addProductSelect');
+      const pid = select?.value;
+      if (!pid) { Toast.error('Select a product first'); return; }
+
+      const existing = this._inventory.find(i => i.product_id === pid);
+      if (existing) { Toast.error('That product is already in your inventory'); return; }
+
+      const qty = parseFloat(document.getElementById('addProductQty')?.value) || 1;
+      const unit = document.getElementById('addProductUnit')?.value || 'lbs';
+
+      // Find product info from catalog
+      let productInfo = null;
+      for (const [typeName, products] of Object.entries(this._products || {})) {
+        const found = products.find(p => p.id === pid);
+        if (found) { productInfo = { ...found, product_type: typeName }; break; }
+      }
+
+      this._inventory.push({
+        product_id: pid,
+        quantity: qty,
+        unit,
+        product_name: productInfo?.name || pid,
+        product_brand: productInfo?.brand || '',
+        product_type: productInfo?.type || productInfo?.product_type || '',
+      });
+
+      await this._saveInventoryToServer();
+      refresh();
+      if (select) select.value = '';
+      Toast.success('Chemical added to inventory ✅');
     });
   },
 };

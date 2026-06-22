@@ -4,6 +4,7 @@ const QuickEntryPage = {
   measurementValues: {},
   lastMeasurements: {},   // last known test values, fetched on render for slider defaults
   selectedChemical: null,
+  algaeLevel: 'none',
   chemForm: 'tabs',
   chemAmount: 1,
   chemUnit: '3" tabs',
@@ -29,6 +30,7 @@ const QuickEntryPage = {
     this.completedStatuses = new Set();
     this.panelNotes = {};
     this.entryDate = null;
+    this.algaeLevel = 'none';
     this.poolStatus = 'open';
 
     try {
@@ -188,9 +190,35 @@ const QuickEntryPage = {
     html += `<div class="section-title" style="margin-bottom:var(--space-md)">Water Chemistry</div>`;
     const params = ['free_chlorine', 'total_chlorine', 'bromine', 'ph', 'alkalinity', 'cyanuric_acid'];
     params.forEach(param => { html += this.renderMeasurementSlider(param); });
+    html += this.renderAlgaeSelector();
     html += this.renderNotesSection('test');
     html += `<div class="submit-area"><button class="btn btn-primary btn-block btn-lg" id="submitMeasurement">💾 Save Reading</button></div>`;
     return html;
+  },
+
+  renderAlgaeSelector() {
+    const levels = [
+      { id: 'none',     label: 'None',     emoji: '✓',  color: '#22c55e', desc: 'No algae visible' },
+      { id: 'slight',   label: 'Slight',   emoji: '🟡', color: '#eab308', desc: 'Faint green tint' },
+      { id: 'moderate', label: 'Moderate', emoji: '🟠', color: '#f97316', desc: 'Cloudy green water' },
+      { id: 'heavy',    label: 'Heavy',    emoji: '🔴', color: '#ef4444', desc: 'Visibly green' },
+      { id: 'swamp',    label: 'Swamp',    emoji: '🐸', color: '#16a34a', desc: 'Dark green / black' },
+    ];
+    const buttons = levels.map(l => {
+      const isActive = this.algaeLevel === l.id;
+      return `<button class="algae-btn${isActive ? ' active' : ''}" data-algae="${l.id}"
+        style="${isActive ? `border-color:${l.color};background:${l.color}22;color:${l.color}` : ''}"
+        title="${l.desc}">
+        <span class="algae-btn-emoji">${l.emoji}</span>
+        <span class="algae-btn-label">${l.label}</span>
+      </button>`;
+    }).join('');
+    const current = levels.find(l => l.id === this.algaeLevel);
+    return `<div class="algae-selector-container">
+      <div class="section-title" style="margin-bottom:var(--space-sm)">Algae Observation</div>
+      <div class="algae-btn-row">${buttons}</div>
+      <div class="algae-current-desc" id="algaeDesc">${current ? current.desc : ''}</div>
+    </div>`;
   },
 
   renderHealthSlider() {
@@ -387,6 +415,37 @@ const QuickEntryPage = {
       });
     }
 
+    // Algae level chip buttons
+    const algaeLevels = [
+      { id: 'none', color: '#22c55e', desc: 'No algae visible' },
+      { id: 'slight', color: '#eab308', desc: 'Faint green tint' },
+      { id: 'moderate', color: '#f97316', desc: 'Cloudy green water' },
+      { id: 'heavy', color: '#ef4444', desc: 'Visibly green' },
+      { id: 'swamp', color: '#16a34a', desc: 'Dark green / black' },
+    ];
+    document.querySelectorAll('.algae-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.algaeLevel = btn.dataset.algae;
+        const spec = algaeLevels.find(l => l.id === this.algaeLevel);
+        document.querySelectorAll('.algae-btn').forEach(b => {
+          const s = algaeLevels.find(l => l.id === b.dataset.algae);
+          if (b.dataset.algae === this.algaeLevel && s) {
+            b.classList.add('active');
+            b.style.borderColor = s.color;
+            b.style.background = s.color + '22';
+            b.style.color = s.color;
+          } else {
+            b.classList.remove('active');
+            b.style.borderColor = '';
+            b.style.background = '';
+            b.style.color = '';
+          }
+        });
+        const descEl = document.getElementById('algaeDesc');
+        if (descEl && spec) descEl.textContent = spec.desc;
+      });
+    });
+
     document.getElementById('submitMeasurement')?.addEventListener('click', () => this.submitMeasurement());
   },
 
@@ -398,6 +457,7 @@ const QuickEntryPage = {
       if (hasValues) {
         await API.addMeasurement({
           ...this.measurementValues,
+          algae_level: this.algaeLevel || 'none',
           ...(notes ? { notes } : {}),
           ...(entryDate ? { entry_date: entryDate } : {}),
         });

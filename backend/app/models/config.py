@@ -1,7 +1,7 @@
 """Pool configuration and maintenance schedule models."""
 
 from datetime import datetime
-from sqlalchemy import Integer, String, Float, Text, DateTime, Boolean, func
+from sqlalchemy import Integer, String, Float, Text, DateTime, Boolean, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
@@ -28,6 +28,19 @@ class PoolConfig(Base):
     pool_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pool_closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ChemicalInventoryItem(Base):
+    """A chemical product the user has on hand, with quantity."""
+
+    __tablename__ = "chemical_inventory"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pool_config_id: Mapped[int] = mapped_column(ForeignKey("pool_config.id", ondelete="CASCADE"))
+    product_id: Mapped[str] = mapped_column(String(100))  # key into CHEMICAL_PRODUCTS catalog
+    quantity: Mapped[float] = mapped_column(Float, default=0)
+    unit: Mapped[str] = mapped_column(String(30))  # lbs, gallons, quarts, oz, bags, bottles
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 

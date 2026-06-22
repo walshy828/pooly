@@ -150,6 +150,9 @@ const DashboardPage = {
               <div class="all-good-sub">No chemistry corrections or urgent tasks needed right now.</div>
             </div>
           </div>
+          <button class="tp-dashboard-btn tp-dashboard-btn-subtle" onclick="App.navigate('treatment-plan')">
+            🧪 View Treatment Plan
+          </button>
         </div>`;
     }
 
@@ -214,6 +217,9 @@ const DashboardPage = {
           <div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div>
         </div>
         <div class="action-list">${items}</div>
+        <button class="tp-dashboard-btn" onclick="App.navigate('treatment-plan')">
+          🧪 Build Step-by-Step Treatment Plan
+        </button>
       </div>`;
   },
 

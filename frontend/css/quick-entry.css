@@ -377,3 +377,107 @@
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+/* ── Algae Level Selector ───────────────────────────────────── */
+.algae-selector-container {
+  margin-bottom: var(--space-xl);
+  padding: var(--space-lg);
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.algae-btn-row {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: var(--space-sm);
+}
+
+.algae-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(255,255,255,0.04);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  min-width: 58px;
+}
+.algae-btn:active { transform: scale(0.97); }
+.algae-btn.active { font-weight: var(--fw-semibold); }
+
+.algae-btn-emoji { font-size: 1.2rem; }
+.algae-btn-label { line-height: 1; }
+
+.algae-current-desc {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+  min-height: 16px;
+}
+
+/* ── Chemical Inventory (Settings) ─────────────────────────── */
+.inv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.inv-row:last-child { border-bottom: none; }
+
+.inv-row-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+  min-width: 0;
+}
+.inv-type-icon { font-size: 1.2rem; flex-shrink: 0; }
+.inv-row-text { flex: 1; min-width: 0; }
+.inv-product-name { font-size: var(--fs-sm); font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.inv-row-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.inv-qty-input {
+  width: 64px !important;
+  text-align: center;
+  padding: 6px 4px !important;
+  font-size: var(--fs-sm) !important;
+}
+
+.inv-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  transition: color 0.15s;
+}
+.inv-remove-btn:hover { color: var(--color-danger); }
+
+.inv-add-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.inv-add-row .form-input,
+.inv-add-row .form-select { flex-shrink: 0; }

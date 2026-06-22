@@ -938,3 +938,212 @@
 .pool-impact-row.impact-warning .impact-text { color: var(--color-warning); }
 .pool-impact-row.impact-info    .impact-text { color: var(--text-secondary); }
 .impact-icon { flex-shrink: 0; font-size: 1rem; }
+
+/* ── Treatment Plan Dashboard Button ────────────────────────── */
+.tp-dashboard-btn {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(59, 130, 246, 0.12);
+  border: 1.5px solid rgba(59, 130, 246, 0.4);
+  border-radius: var(--radius-lg);
+  color: #60a5fa;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+.tp-dashboard-btn:hover, .tp-dashboard-btn:active {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+.tp-dashboard-btn-subtle {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.1);
+  color: var(--text-secondary);
+}
+.tp-dashboard-btn-subtle:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
+}
+
+/* ── Treatment Plan Page ─────────────────────────────────────── */
+.tp-empty-card {
+  text-align: center;
+  padding: var(--space-2xl) var(--space-lg);
+}
+.tp-empty-icon { font-size: 3rem; margin-bottom: var(--space-md); }
+.tp-empty-title { font-size: var(--fs-lg); font-weight: var(--fw-bold); margin-bottom: var(--space-sm); }
+.tp-empty-desc { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.6; margin-bottom: var(--space-xl); }
+
+.tp-algae-prompt { margin-bottom: var(--space-md); }
+.tp-prompt-label { font-size: var(--fs-sm); font-weight: var(--fw-medium); margin-bottom: var(--space-md); color: var(--text-secondary); }
+
+.tp-hint {
+  margin-top: var(--space-lg);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.tp-link { color: #60a5fa; text-decoration: none; }
+
+/* Plan Header */
+.tp-plan-header {
+  margin-bottom: var(--space-lg);
+  padding: var(--space-lg);
+}
+.tp-plan-title { font-size: var(--fs-lg); font-weight: var(--fw-bold); margin-bottom: 4px; }
+.tp-plan-meta { font-size: var(--fs-xs); color: var(--text-muted); margin-bottom: var(--space-md); }
+.tp-complete-badge {
+  display: inline-block;
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+.tp-progress-wrap { margin-top: var(--space-sm); }
+.tp-progress-bar {
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.tp-progress-fill { height: 100%; border-radius: var(--radius-full); transition: width 0.4s ease; }
+.tp-progress-label { font-size: var(--fs-xs); color: var(--text-muted); }
+
+/* Step Cards */
+.tp-steps-list { display: flex; flex-direction: column; gap: var(--space-md); margin-bottom: var(--space-lg); }
+
+.tp-step {
+  background: var(--card-bg);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  transition: border-color 0.2s;
+}
+.tp-step-done { opacity: 0.6; }
+.tp-step-current { border-color: rgba(59,130,246,0.4); background: rgba(59,130,246,0.05); }
+.tp-step-waiting { opacity: 0.7; }
+
+.tp-step-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.tp-step-num-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.tp-step-action-icon { font-size: 1.4rem; }
+.tp-step-num { font-size: var(--fs-xs); color: var(--text-muted); font-weight: var(--fw-bold); }
+
+.tp-step-main { flex: 1; min-width: 0; }
+.tp-step-title { font-size: var(--fs-md); font-weight: var(--fw-semibold); margin-bottom: 4px; }
+
+.tp-step-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: var(--fs-xs);
+  background: rgba(255,255,255,0.06);
+  color: var(--text-muted);
+}
+.tp-badge-done { background: rgba(34,197,94,0.12); color: var(--color-success); }
+.tp-badge-current { background: rgba(59,130,246,0.15); color: #60a5fa; }
+
+.tp-step-done-date { font-size: var(--fs-xs); color: var(--text-muted); margin-bottom: var(--space-sm); }
+.tp-step-desc { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.6; margin-bottom: var(--space-sm); }
+
+.tp-step-amount {
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(59,130,246,0.08);
+  border-radius: var(--radius-md);
+  border-left: 3px solid rgba(59,130,246,0.4);
+}
+.tp-amount-num { font-size: var(--fs-md); font-weight: var(--fw-bold); color: #60a5fa; }
+.tp-amount-product { font-size: var(--fs-xs); color: var(--text-muted); display: block; margin-top: 2px; }
+
+.tp-step-wait {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin: var(--space-sm) 0;
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+}
+
+.tp-step-safety {
+  font-size: var(--fs-xs);
+  color: #f59e0b;
+  background: rgba(245,158,11,0.08);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  margin: var(--space-sm) 0;
+  line-height: 1.5;
+}
+
+.tp-step-why {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  margin: var(--space-sm) 0;
+}
+.tp-step-why summary { cursor: pointer; color: var(--text-secondary); }
+.tp-step-why p { margin-top: var(--space-xs); line-height: 1.5; padding-left: var(--space-sm); }
+
+.tp-step-alts {
+  font-size: var(--fs-xs);
+  margin: var(--space-xs) 0;
+  color: var(--text-muted);
+}
+.tp-alt-badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.06);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  margin: 2px 2px;
+  font-size: var(--fs-xs);
+}
+
+.tp-step-user-note {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  font-style: italic;
+  margin: var(--space-xs) 0;
+}
+
+.tp-step-footer {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  flex-wrap: wrap;
+}
+.tp-complete-btn {
+  flex: 1;
+  min-width: 120px;
+}
+.tp-test-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.tp-plan-actions {
+  padding: var(--space-lg) 0 var(--space-2xl);
+}
+
+/* Algae picker used on both quick-entry and treatment-plan generate */
+#genAlgaePicker.algae-btn-row {
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}

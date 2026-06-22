@@ -73,4 +73,16 @@ const API = {
 
   // Health check
   health() { return this._fetch('/health'); },
+
+  // Treatment Plans
+  generateTreatmentPlan(data = {}) { return this._fetch('/treatment-plans/generate', { method: 'POST', body: data }); },
+  getTreatmentPlans() { return this._fetch('/treatment-plans'); },
+  getTreatmentPlan(planId) { return this._fetch(`/treatment-plans/${planId}`); },
+  completeStep(planId, stepId, data) { return this._fetch(`/treatment-plans/${planId}/steps/${stepId}`, { method: 'PATCH', body: data }); },
+  cancelPlan(planId) { return this._fetch(`/treatment-plans/${planId}/cancel`, { method: 'POST' }); },
+
+  // Chemical Inventory
+  getChemicalInventory() { return this._fetch('/chemical-inventory'); },
+  saveChemicalInventory(items) { return this._fetch('/chemical-inventory', { method: 'PUT', body: items }); },
+  getChemicalProducts() { return this._fetch('/chemical-inventory/products'); },
 };

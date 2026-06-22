@@ -1,8 +1,10 @@
 """Measurement schemas."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel
+
+AlgaeLevelType = Optional[Literal["none", "slight", "moderate", "heavy", "swamp"]]
 
 
 class MeasurementCreate(BaseModel):
@@ -14,6 +16,7 @@ class MeasurementCreate(BaseModel):
     calcium_hardness: Optional[float] = None
     bromine: Optional[float] = None
     water_clarity: Optional[int] = None
+    algae_level: AlgaeLevelType = None
     notes: Optional[str] = None
     entry_date: Optional[datetime] = None
 
@@ -30,6 +33,7 @@ class MeasurementResponse(BaseModel):
     calcium_hardness: Optional[float] = None
     bromine: Optional[float] = None
     water_clarity: Optional[int] = None
+    algae_level: AlgaeLevelType = None
     notes: Optional[str] = None
 
     class Config:

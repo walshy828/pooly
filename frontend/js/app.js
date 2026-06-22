@@ -8,7 +8,7 @@ const App = {
     const hash = location.hash.slice(1);
     if (!hash) return { page: 'dashboard', tab: null };
     const [rawPage, tab = null] = hash.split('/');
-    const pageMap = { journal: 'history', home: 'dashboard' };
+    const pageMap = { journal: 'history', home: 'dashboard', plan: 'treatment-plan' };
     return { page: pageMap[rawPage] || rawPage, tab };
   },
 
@@ -113,7 +113,7 @@ const App = {
     if (!this.authenticated && page !== 'pin') return;
     const { tab = null, skipHash = false } = options;
 
-    const validPages = ['dashboard', 'quick-entry', 'history', 'settings'];
+    const validPages = ['dashboard', 'quick-entry', 'history', 'settings', 'treatment-plan'];
     const targetPage = validPages.includes(page) ? page : 'dashboard';
 
     this.currentPage = targetPage;
@@ -122,7 +122,7 @@ const App = {
     window.scrollTo(0, 0);
 
     if (!skipHash) {
-      const hashPage = targetPage === 'history' ? 'journal' : targetPage;
+      const hashPage = targetPage === 'history' ? 'journal' : targetPage === 'treatment-plan' ? 'plan' : targetPage;
       const newHash = tab ? `${hashPage}/${tab}` : hashPage;
       history.pushState(null, '', `#${newHash}`);
     }
@@ -140,6 +140,9 @@ const App = {
         break;
       case 'settings':
         await SettingsPage.render(this.contentEl);
+        break;
+      case 'treatment-plan':
+        await TreatmentPlanPage.render(this.contentEl);
         break;
       default:
         await DashboardPage.render(this.contentEl);

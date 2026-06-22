@@ -1,13 +1,22 @@
 """Journal-related models: entries, measurements, chemicals, maintenance, observations, quick status."""
 
+import enum
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
     Integer, String, Float, Text, DateTime, ForeignKey, JSON,
-    func,
+    func, Enum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
+
+
+class AlgaeLevel(str, enum.Enum):
+    none = "none"
+    slight = "slight"
+    moderate = "moderate"
+    heavy = "heavy"
+    swamp = "swamp"
 
 
 class JournalEntry(Base):
@@ -45,6 +54,7 @@ class Measurement(Base):
     calcium_hardness: Mapped[float | None] = mapped_column(Float, nullable=True)
     bromine: Mapped[float | None] = mapped_column(Float, nullable=True)
     water_clarity: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-10 scale
+    algae_level: Mapped[str | None] = mapped_column(Enum(AlgaeLevel), nullable=True, default="none")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     journal_entry: Mapped["JournalEntry"] = relationship(back_populates="measurements")

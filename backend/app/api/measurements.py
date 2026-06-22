@@ -32,6 +32,7 @@ async def add_measurement(data: MeasurementCreate, db: AsyncSession = Depends(ge
         calcium_hardness=data.calcium_hardness,
         bromine=data.bromine,
         water_clarity=data.water_clarity,
+        algae_level=data.algae_level,
         notes=data.notes,
     )
     db.add(meas)

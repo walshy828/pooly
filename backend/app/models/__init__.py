@@ -8,9 +8,11 @@ from app.models.journal import (
     MaintenanceAction,
     PoolObservation,
     QuickStatus,
+    AlgaeLevel,
 )
 from app.models.sensor import SensorReading, WeatherSnapshot
-from app.models.config import PoolConfig, MaintenanceSchedule
+from app.models.config import PoolConfig, MaintenanceSchedule, ChemicalInventoryItem
+from app.models.treatment_plan import TreatmentPlan, TreatmentStep, PlanType, PlanStatus, ActionType
 
 __all__ = [
     "Base",
@@ -20,8 +22,15 @@ __all__ = [
     "MaintenanceAction",
     "PoolObservation",
     "QuickStatus",
+    "AlgaeLevel",
     "SensorReading",
     "WeatherSnapshot",
     "PoolConfig",
     "MaintenanceSchedule",
+    "ChemicalInventoryItem",
+    "TreatmentPlan",
+    "TreatmentStep",
+    "PlanType",
+    "PlanStatus",
+    "ActionType",
 ]
