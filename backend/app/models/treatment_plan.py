@@ -2,7 +2,7 @@
 
 import enum
 from datetime import datetime
-from sqlalchemy import Integer, String, Float, Text, DateTime, ForeignKey, JSON, Boolean, func, Enum
+from sqlalchemy import Integer, String, Float, Text, DateTime, ForeignKey, JSON, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
@@ -34,8 +34,8 @@ class TreatmentPlan(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     pool_config_id: Mapped[int] = mapped_column(ForeignKey("pool_config.id", ondelete="CASCADE"))
-    plan_type: Mapped[str] = mapped_column(Enum(PlanType))
-    status: Mapped[str] = mapped_column(Enum(PlanStatus), default=PlanStatus.active)
+    plan_type: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(20), default="active")
     condition_label: Mapped[str] = mapped_column(String(100))
     estimated_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     measurement_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -57,7 +57,7 @@ class TreatmentStep(Base):
     step_order: Mapped[int] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    action_type: Mapped[str] = mapped_column(Enum(ActionType))
+    action_type: Mapped[str] = mapped_column(String(30))
     product_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     product_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     amount: Mapped[float | None] = mapped_column(Float, nullable=True)

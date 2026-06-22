@@ -1,6 +1,6 @@
 """Add treatment plans, treatment steps, chemical inventory, and algae_level to measurements
 
-Revision ID: 005_treatment_plans_and_inventory
+Revision ID: 005_treatment_plans
 Revises: 004_quick_status_fullness
 Create Date: 2026-06-22
 """
@@ -17,67 +17,64 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # Add algae_level to measurements
     conn.execute(sa.text(
         "ALTER TABLE measurements ADD COLUMN IF NOT EXISTS algae_level VARCHAR(20)"
     ))
 
-    # Create chemical_inventory table
-    op.create_table(
-        'chemical_inventory',
-        sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column('pool_config_id', sa.Integer(), sa.ForeignKey('pool_config.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('product_id', sa.String(100), nullable=False),
-        sa.Column('quantity', sa.Float(), nullable=False, server_default='0'),
-        sa.Column('unit', sa.String(30), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
-        if_not_exists=True,
-    )
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS chemical_inventory (
+            id SERIAL PRIMARY KEY,
+            pool_config_id INTEGER NOT NULL REFERENCES pool_config(id) ON DELETE CASCADE,
+            product_id VARCHAR(100) NOT NULL,
+            quantity FLOAT NOT NULL DEFAULT 0,
+            unit VARCHAR(30) NOT NULL,
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """))
 
-    # Create treatment_plans table
-    op.create_table(
-        'treatment_plans',
-        sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column('pool_config_id', sa.Integer(), sa.ForeignKey('pool_config.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('plan_type', sa.String(50), nullable=False),
-        sa.Column('status', sa.String(20), nullable=False, server_default='active'),
-        sa.Column('condition_label', sa.String(100), nullable=False),
-        sa.Column('estimated_days', sa.Integer(), nullable=True),
-        sa.Column('measurement_snapshot', sa.JSON(), nullable=True),
-        sa.Column('pool_gallons', sa.Integer(), nullable=True),
-        sa.Column('notes', sa.Text(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
-        if_not_exists=True,
-    )
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS treatment_plans (
+            id SERIAL PRIMARY KEY,
+            pool_config_id INTEGER NOT NULL REFERENCES pool_config(id) ON DELETE CASCADE,
+            plan_type VARCHAR(50) NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'active',
+            condition_label VARCHAR(100) NOT NULL,
+            estimated_days INTEGER,
+            measurement_snapshot JSONB,
+            pool_gallons INTEGER,
+            notes TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            completed_at TIMESTAMPTZ
+        )
+    """))
 
-    # Create treatment_steps table
-    op.create_table(
-        'treatment_steps',
-        sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column('plan_id', sa.Integer(), sa.ForeignKey('treatment_plans.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('step_order', sa.Integer(), nullable=False),
-        sa.Column('title', sa.String(200), nullable=False),
-        sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('action_type', sa.String(30), nullable=False),
-        sa.Column('product_id', sa.String(100), nullable=True),
-        sa.Column('product_name', sa.String(200), nullable=True),
-        sa.Column('amount', sa.Float(), nullable=True),
-        sa.Column('unit', sa.String(30), nullable=True),
-        sa.Column('bags_needed', sa.Integer(), nullable=True),
-        sa.Column('wait_hours_after', sa.Float(), nullable=True),
-        sa.Column('why', sa.Text(), nullable=True),
-        sa.Column('safety_notes', sa.Text(), nullable=True),
-        sa.Column('alternative_products', sa.JSON(), nullable=True),
-        sa.Column('is_completed', sa.Boolean(), nullable=False, server_default='false'),
-        sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('user_notes', sa.Text(), nullable=True),
-        if_not_exists=True,
-    )
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS treatment_steps (
+            id SERIAL PRIMARY KEY,
+            plan_id INTEGER NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+            step_order INTEGER NOT NULL,
+            title VARCHAR(200) NOT NULL,
+            description TEXT,
+            action_type VARCHAR(30) NOT NULL,
+            product_id VARCHAR(100),
+            product_name VARCHAR(200),
+            amount FLOAT,
+            unit VARCHAR(30),
+            bags_needed INTEGER,
+            wait_hours_after FLOAT,
+            why TEXT,
+            safety_notes TEXT,
+            alternative_products JSONB,
+            is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+            completed_at TIMESTAMPTZ,
+            user_notes TEXT
+        )
+    """))
 
 
 def downgrade() -> None:
-    op.drop_table('treatment_steps')
-    op.drop_table('treatment_plans')
-    op.drop_table('chemical_inventory')
-    op.drop_column('measurements', 'algae_level')
+    conn = op.get_bind()
+    conn.execute(sa.text("DROP TABLE IF EXISTS treatment_steps"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS treatment_plans"))
+    conn.execute(sa.text("DROP TABLE IF EXISTS chemical_inventory"))
+    conn.execute(sa.text("ALTER TABLE measurements DROP COLUMN IF EXISTS algae_level"))
