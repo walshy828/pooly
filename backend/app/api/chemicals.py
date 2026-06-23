@@ -37,6 +37,8 @@ async def add_chemical(data: ChemicalAdditionCreate, db: AsyncSession = Depends(
         await update_schedule_completion(db, "add_chlorine", entry_dt)
     elif data.chemical_type == "cyanuric_acid":
         await update_schedule_completion(db, "check_cya", entry_dt)
+    elif data.chemical_type == "shock":
+        await update_schedule_completion(db, "shock_pool", entry_dt)
 
     await db.commit()
     await db.refresh(chem)

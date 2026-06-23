@@ -68,23 +68,40 @@ const Chemistry = {
 
   // Chemical types for the form
   chemicals: [
-    { type: 'chlorine', label: 'Chlorine', icon: '🧪' },
-    { type: 'ph_up', label: 'pH Up', icon: '⬆️' },
-    { type: 'ph_down', label: 'pH Down', icon: '⬇️' },
-    { type: 'alkalinity', label: 'Alkalinity+', icon: '⚖️' },
+    { type: 'shock',        label: 'Shock',       icon: '⚡' },
+    { type: 'chlorine',     label: 'Chlorine',    icon: '🧪' },
+    { type: 'ph_up',        label: 'pH Up',       icon: '⬆️' },
+    { type: 'ph_down',      label: 'pH Down',     icon: '⬇️' },
+    { type: 'alkalinity',   label: 'Alkalinity+', icon: '⚖️' },
     { type: 'cyanuric_acid', label: 'Stabilizer', icon: '☀️' },
-    { type: 'hardener', label: 'Hardener', icon: '💎' },
-    { type: 'algaecide', label: 'Algaecide', icon: '🦠' },
-    { type: 'clarifier', label: 'Clarifier', icon: '✨' },
+    { type: 'hardener',     label: 'Hardener',    icon: '💎' },
+    { type: 'algaecide',    label: 'Algaecide',   icon: '🦠' },
+    { type: 'clarifier',    label: 'Clarifier',   icon: '✨' },
   ],
 
-  quickStatuses: [
-    { type: 'clear_water', label: 'Clear Water', icon: '💧' },
-    { type: 'clean_skimmer', label: 'Clean Skimmer', icon: '🧹' },
-    { type: 'robot_run', label: 'Robot Run', icon: '🤖' },
-    { type: 'vacuumed', label: 'Vacuumed', icon: '🌊' },
-    { type: 'basket_emptied', label: 'Basket Emptied', icon: '🗑️' },
-    { type: 'brush_walls', label: 'Brushed Walls', icon: '🖌️' },
+  // Maps quick-entry chemical type → product catalog type (null = no catalog products)
+  chemToCatalogType: {
+    shock:        'shock',
+    ph_up:        'ph_up',
+    ph_down:      'ph_down',
+    alkalinity:   'alkalinity_up',
+    cyanuric_acid: 'cya',
+    hardener:     'hardness',
+    algaecide:    'algaecide',
+    clarifier:    'clarifier',
+    chlorine:     null,
+  },
+
+  poolCareActions: [
+    { type: 'clean_skimmer',   icon: '🗑️', label: 'Empty Skimmer',         isBasket: true  },
+    { type: 'empty_basket',    icon: '🗑️', label: 'Empty Pump Basket',      isBasket: true  },
+    { type: 'robot_run',       icon: '🤖', label: 'Run Pool Robot',          isBasket: false },
+    { type: 'vacuum',          icon: '🌊', label: 'Vacuum Pool',             isBasket: false },
+    { type: 'brush_walls',     icon: '🖌️', label: 'Brush Walls',            isBasket: false },
+    { type: 'clean_cartridge', icon: '🔧', label: 'Clean Filter Cartridge', isBasket: false },
+    { type: 'backwash',        icon: '♻️', label: 'Backwash Filter',        isBasket: false },
+    { type: 'add_water',       icon: '💧', label: 'Check Water Level',       isBasket: false },
+    { type: 'clear_water',     icon: '💧', label: 'Clear Water',             isBasket: false },
   ],
 
   healthLabels: {

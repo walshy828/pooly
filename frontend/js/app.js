@@ -7,8 +7,11 @@ const App = {
   parseHash() {
     const hash = location.hash.slice(1);
     if (!hash) return { page: 'dashboard', tab: null };
-    const [rawPage, tab = null] = hash.split('/');
+    const [rawPage, rawTab = null] = hash.split('/');
     const pageMap = { journal: 'history', home: 'dashboard', plan: 'treatment-plan' };
+    // Remap legacy quick-entry tabs to merged care tab
+    const tabMap = { maint: 'care', status: 'care' };
+    const tab = rawTab ? (tabMap[rawTab] || rawTab) : null;
     return { page: pageMap[rawPage] || rawPage, tab };
   },
 

@@ -15,7 +15,7 @@ DEFAULT_SCHEDULES = [
     {"task_type": "add_chlorine", "display_name": "Add Chlorine", "interval_days": 3, "priority": "high", "icon": "🧪"},
     {"task_type": "clean_cartridge", "display_name": "Clean Filter Cartridge", "interval_days": 30, "priority": "normal", "icon": "🔧"},
     {"task_type": "shock_pool", "display_name": "Shock Pool", "interval_days": 14, "priority": "normal", "icon": "⚡"},
-    {"task_type": "clean_skimmer", "display_name": "Clean Skimmer Basket", "interval_days": 7, "priority": "normal", "icon": "🧹"},
+    {"task_type": "clean_skimmer", "display_name": "Empty Skimmer", "interval_days": 7, "priority": "normal", "icon": "🗑️"},
     {"task_type": "robot_run", "display_name": "Run Pool Robot", "interval_days": 7, "priority": "low", "icon": "🤖"},
     {"task_type": "vacuum", "display_name": "Vacuum Pool", "interval_days": 14, "priority": "low", "icon": "🌊"},
     {"task_type": "empty_basket", "display_name": "Empty Pump Basket", "interval_days": 7, "priority": "normal", "icon": "🗑️"},
@@ -43,13 +43,25 @@ TASK_COMPLETION_MAP = {
 
 
 async def ensure_default_schedules(db: AsyncSession):
-    """Create default maintenance schedules if none exist."""
-    result = await db.execute(select(func.count(MaintenanceSchedule.id)))
-    count = result.scalar()
-    if count == 0:
+    """Create default maintenance schedules if none exist, or update labels/icons on existing ones."""
+    result = await db.execute(select(MaintenanceSchedule))
+    existing = {s.task_type: s for s in result.scalars().all()}
+
+    if not existing:
         for sched in DEFAULT_SCHEDULES:
             db.add(MaintenanceSchedule(**sched))
-        await db.commit()
+    else:
+        for sched in DEFAULT_SCHEDULES:
+            row = existing.get(sched["task_type"])
+            if row is None:
+                db.add(MaintenanceSchedule(**sched))
+            else:
+                if row.display_name != sched["display_name"]:
+                    row.display_name = sched["display_name"]
+                if row.icon != sched.get("icon"):
+                    row.icon = sched.get("icon")
+
+    await db.commit()
 
 
 async def update_schedule_completion(db: AsyncSession, task_type: str, completed_at: datetime):

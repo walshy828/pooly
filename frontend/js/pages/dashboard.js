@@ -545,19 +545,12 @@ const DashboardPage = {
   },
 
   async _logDirectTask(taskType, entryDate, notes, fullness = null) {
-    const maintTasks = new Set(['clean_cartridge', 'add_water', 'backwash', 'brush_walls']);
-    const statusMap  = { clean_skimmer: 'clean_skimmer', robot_run: 'robot_run', vacuum: 'vacuumed', empty_basket: 'basket_emptied' };
-    const datePayload = entryDate ? { entry_date: entryDate } : {};
-    const notePayload = notes    ? { notes }                  : {};
-    if (maintTasks.has(taskType)) {
-      await API.addMaintenance({ action_type: taskType, ...datePayload, ...notePayload });
-    } else if (statusMap[taskType]) {
-      const fullnessPayload = fullness != null ? { fullness } : {};
-      await API.addQuickStatus({ status_type: statusMap[taskType], ...datePayload, ...fullnessPayload });
-      if (notes) await API.addNote(notes, entryDate || null);
-    } else {
-      throw new Error(`Unknown task type: ${taskType}`);
-    }
+    await API.logPoolCareAction({
+      task_type: taskType,
+      ...(entryDate ? { entry_date: entryDate } : {}),
+      ...(notes ? { notes } : {}),
+      ...(fullness != null ? { fullness } : {}),
+    });
   },
 
   _buildLogForm(taskType, displayName, isBasketTask = false) {

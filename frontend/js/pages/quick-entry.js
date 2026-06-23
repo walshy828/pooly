@@ -4,41 +4,50 @@ const QuickEntryPage = {
   measurementValues: {},
   lastMeasurements: {},   // last known test values, fetched on render for slider defaults
   selectedChemical: null,
+  selectedProduct: null,  // { id, name, brand, form, package_unit, from:'inventory'|'catalog', onHand }
+  chemQuantity: 1,
+  chemUnit: 'lbs',
+  _inventory: [],
+  _productCatalog: {},    // { catalogType: [{ id, name, brand, form, package_size, package_unit, ... }] }
+  _poolGallons: null,
+  _catalogExpanded: false,
   algaeLevel: 'none',
-  chemForm: 'tabs',
-  chemAmount: 1,
-  chemUnit: '3" tabs',
-  shockType: 'bottle',
-  shockUnits: 1,
   healthScore: 7,
-  completedStatuses: new Set(),
+  completedCareActions: new Set(),
   panelNotes: {},
   entryDate: null,        // null = now; ISO string = backdated
   pendingReminder: null,  // { task_type, display_name } when navigated from a reminder
 
   tabs: [
-    { id: 'test',   label: '🔬 Water Test',  name: 'Water Test' },
-    { id: 'chem',   label: '💧 Chemicals',   name: 'Chemicals' },
-    { id: 'maint',  label: '🔧 Pool Care',   name: 'Pool Care' },
-    { id: 'status', label: '✅ Quick Check', name: 'Quick Check' },
-    { id: 'note',   label: '📝 Note',        name: 'Note' },
+    { id: 'test', label: '🔬 Water Test', name: 'Water Test' },
+    { id: 'chem', label: '💧 Chemicals',  name: 'Chemicals'  },
+    { id: 'care', label: '🔧 Pool Care',  name: 'Pool Care'  },
+    { id: 'note', label: '📝 Note',       name: 'Note'       },
   ],
 
   async render(container) {
     this.measurementValues = {};
     this.lastMeasurements = {};
-    this.completedStatuses = new Set();
+    this.completedCareActions = new Set();
     this.panelNotes = {};
     this.entryDate = null;
     this.algaeLevel = 'none';
     this.poolStatus = 'open';
+    this._inventory = [];
+    this._productCatalog = {};
+    this._poolGallons = null;
 
     try {
-      const [settingsData, dashData] = await Promise.all([
+      const [settingsData, dashData, inventory, catalog] = await Promise.all([
         API.getSettings(),
         API.getDashboard().catch(() => null),
+        API.getChemicalInventory().catch(() => []),
+        API.getChemicalProducts().catch(() => ({})),
       ]);
       this.poolStatus = settingsData.pool_status;
+      this._poolGallons = settingsData.pool?.volume_gallons || null;
+      this._inventory = inventory;
+      this._productCatalog = catalog;
       if (dashData?.chemistry) {
         dashData.chemistry.forEach(c => {
           if (c.value != null) this.lastMeasurements[c.parameter] = c.value;
@@ -48,12 +57,12 @@ const QuickEntryPage = {
 
     container.innerHTML = `
       <div class="page-header">
-        <div class="page-title">➕ Quick Entry</div>
+        <div class="page-title">➕ Log Entry</div>
       </div>
       <div class="quick-entry-tabs">
         <div class="tab-bar" id="entryTabs">
           ${this.tabs.map(t => {
-            const isDisabled = this.poolStatus === 'closed' && ['chem', 'maint', 'status'].includes(t.id);
+            const isDisabled = this.poolStatus === 'closed' && ['chem', 'care'].includes(t.id);
             return `<button class="tab-item${t.id === this.activeTab ? ' active' : ''}"
                             data-tab="${t.id}" ${isDisabled ? 'disabled' : ''}
                             title="${isDisabled ? 'Pool is closed' : ''}">${t.label}</button>`;
@@ -79,7 +88,7 @@ const QuickEntryPage = {
       }
     });
 
-    if (this.poolStatus === 'closed' && ['chem', 'maint', 'status'].includes(this.activeTab)) {
+    if (this.poolStatus === 'closed' && ['chem', 'care'].includes(this.activeTab)) {
       this.activeTab = 'test';
     }
 
@@ -98,18 +107,17 @@ const QuickEntryPage = {
     const panel = document.getElementById('entryPanel');
     if (!panel) return;
     switch (this.activeTab) {
-      case 'test':   panel.innerHTML = this.renderTestPanel();   this.bindTestPanel();   break;
-      case 'chem':   panel.innerHTML = this.renderChemPanel();   this.bindChemPanel();   break;
-      case 'maint':  panel.innerHTML = this.renderMaintPanel();  this.bindMaintPanel();  break;
-      case 'status': panel.innerHTML = this.renderStatusPanel(); this.bindStatusPanel(); break;
-      case 'note':   panel.innerHTML = this.renderNotePanel();   this.bindNotePanel();   break;
+      case 'test': panel.innerHTML = this.renderTestPanel(); this.bindTestPanel(); break;
+      case 'chem': panel.innerHTML = this.renderChemPanel(); this.bindChemPanel(); break;
+      case 'care': panel.innerHTML = this.renderCarePanel(); this.bindCarePanel(); break;
+      case 'note': panel.innerHTML = this.renderNotePanel(); this.bindNotePanel(); break;
     }
   },
 
   captureState() {
     const noteEl = document.getElementById('panelNoteText');
     if (noteEl) this.panelNotes[this.activeTab] = noteEl.value;
-    const dateEl = document.getElementById('entryDateInput');
+    const dateEl = document.getElementById('entryDateInput') || document.getElementById('careDateInput');
     if (dateEl) this.entryDate = this._dateInputToISO(dateEl.value);
   },
 
@@ -476,15 +484,52 @@ const QuickEntryPage = {
 
       if (reminderName) {
         Toast.success(`${reminderName} logged! ✅`);
-        App.navigate('dashboard');
       } else {
         Toast.success('Reading saved! 🎉');
-        this.renderPanel();
       }
+      App.navigate('dashboard');
     } catch (err) { Toast.error('Failed to save: ' + err.message); }
   },
 
   // ── CHEMICAL PANEL ──────────────────────────────────────────
+
+  _chemStep() {
+    return this.chemUnit === 'tabs' ? 1 : 0.5;
+  },
+
+  _suggestQty(product) {
+    const gal = this._poolGallons;
+    if (!gal || !product) return 1;
+    const ratio = gal / 10000;
+    if (product.ppm_per_unit_per_10k) {
+      // Target a standard 10 ppm FC rise for shock
+      const suggested = (10 / product.ppm_per_unit_per_10k) * ratio;
+      return Math.max(0.5, Math.round(suggested * 2) / 2);
+    }
+    // Generic: 1 unit per 10k gal
+    return Math.max(0.5, Math.round(ratio * 2) / 2);
+  },
+
+  _unitFromProduct(product) {
+    if (!product) return 'lbs';
+    if (product.form === 'tablet') return 'tabs';
+    return product.package_unit || (product.form === 'liquid' ? 'gallons' : 'lbs');
+  },
+
+  // Return inventory items for the active chemical type
+  _inventoryForType(chemType) {
+    const catalogType = Chemistry.chemToCatalogType[chemType];
+    if (!catalogType) return [];
+    return (this._inventory || []).filter(i => i.product_type === catalogType);
+  },
+
+  // Return catalog products for the active chemical type
+  _catalogForType(chemType) {
+    const catalogType = Chemistry.chemToCatalogType[chemType];
+    if (!catalogType) return [];
+    return (this._productCatalog[catalogType] || []);
+  },
+
   renderChemPanel() {
     const types = Chemistry.chemicals.map(c => {
       const sel = this.selectedChemical === c.type ? ' selected' : '';
@@ -492,58 +537,144 @@ const QuickEntryPage = {
         <span class="chem-type-icon">${c.icon}</span>${c.label}</button>`;
     }).join('');
 
-    let formHtml = '';
-    if (this.selectedChemical === 'chlorine') {
-      formHtml = `<div class="form-group"><div class="form-label">Form</div>
-        <div class="chlorine-form-toggle">
-          <button class="toggle-btn${this.chemForm === 'tabs' ? ' active' : ''}" data-form="tabs">3" Tabs</button>
-          <button class="toggle-btn${this.chemForm === 'granular' ? ' active' : ''}" data-form="granular">Granular</button>
-        </div></div>
-        <div class="form-group"><div class="form-label">${this.chemForm === 'tabs' ? 'Number of Tabs' : 'Amount (oz)'}</div>
-        <div class="amount-stepper">
-          <button class="stepper-btn" id="chemMinus">−</button>
-          <div class="stepper-value" id="chemAmountDisplay">${this.chemAmount}</div>
-          <button class="stepper-btn" id="chemPlus">+</button>
-        </div></div>`;
-    } else if (this.selectedChemical) {
-      formHtml = `<div class="form-group"><div class="form-label">Amount</div>
-        <div class="amount-stepper">
-          <button class="stepper-btn" id="chemMinus">−</button>
-          <div class="stepper-value" id="chemAmountDisplay">${this.chemAmount}</div>
-          <button class="stepper-btn" id="chemPlus">+</button>
-        </div></div>
-        <div class="form-group"><div class="form-label">Unit</div>
-        <select class="form-select" id="chemUnitSelect">
-          <option value="oz">Ounces (oz)</option><option value="lbs">Pounds (lbs)</option>
-          <option value="cups">Cups</option><option value="gallons">Gallons</option>
-        </select></div>`;
+    let bodyHtml = '';
+    if (this.selectedChemical) {
+      const chemDef = Chemistry.chemicals.find(c => c.type === this.selectedChemical);
+      const hasCatalog = !!Chemistry.chemToCatalogType[this.selectedChemical];
+
+      if (this.selectedProduct) {
+        bodyHtml = this._renderChemQuantityStep(chemDef);
+      } else if (hasCatalog) {
+        bodyHtml = this._renderChemProductPicker(chemDef);
+      } else {
+        // Chlorine and any type without catalog products: simple generic form
+        bodyHtml = this._renderChemGenericForm(chemDef);
+      }
     }
-
-    const notesSection = this.selectedChemical ? this.renderNotesSection('chem') : '';
-    const submitBtn = this.selectedChemical
-      ? `${notesSection}<button class="btn btn-primary btn-block" id="submitChem">💧 Log Chemicals</button>`
-      : '';
-
-    const shockHtml = `<div class="section-title" style="margin-top:var(--space-xl)">Pool Shock</div>
-      <div class="chlorine-form-toggle" style="margin-bottom:var(--space-md)">
-        <button class="toggle-btn${this.shockType === 'bottle' ? ' active' : ''}" data-shock="bottle">🧴 Bottle</button>
-        <button class="toggle-btn${this.shockType === 'granular' ? ' active' : ''}" data-shock="granular">🧂 Granular</button>
-      </div>
-      <div class="form-group"><div class="form-label">Number of ${this.shockType === 'bottle' ? 'Bottles' : 'Bags'}</div>
-      <div class="amount-stepper">
-        <button class="stepper-btn" id="shockMinus">−</button>
-        <div class="stepper-value" id="shockAmountDisplay">${this.shockUnits}</div>
-        <button class="stepper-btn" id="shockPlus">+</button>
-      </div></div>
-      <button class="btn btn-secondary btn-block" id="submitShock">⚡ Log Shock</button>`;
 
     const banner = this.renderPendingReminderBanner();
     const dateRow = this.renderDateSelector();
     return `${banner}${dateRow}
       <div class="section-title">Add Chemicals</div>
       <div class="chemical-type-grid">${types}</div>
-      ${formHtml}${submitBtn}
-      ${shockHtml}`;
+      ${bodyHtml}`;
+  },
+
+  _renderChemProductPicker(chemDef) {
+    const invItems = this._inventoryForType(this.selectedChemical);
+    const catalogItems = this._catalogForType(this.selectedChemical);
+
+    let html = `<div class="chem-picker-section">`;
+
+    if (invItems.length > 0) {
+      html += `<div class="chem-picker-label">Your ${chemDef.label} on hand</div>
+        <div class="chem-product-list">`;
+      invItems.forEach(item => {
+        html += `<div class="chem-product-card" data-product-id="${item.product_id}" data-source="inventory">
+          <div class="chem-product-info">
+            <div class="chem-product-name">${item.product_name || item.product_id}</div>
+            <div class="chem-product-meta">${item.product_brand ? item.product_brand + ' · ' : ''}${item.quantity} ${item.unit} on hand</div>
+          </div>
+          <button class="btn btn-sm btn-primary chem-use-btn">Use →</button>
+        </div>`;
+      });
+      html += `</div>`;
+
+      // Collapsed catalog expander
+      html += `<button class="chem-catalog-toggle" id="catalogToggle">
+        ${this._catalogExpanded ? '▾' : '▸'} Use a different product
+      </button>`;
+      if (this._catalogExpanded && catalogItems.length > 0) {
+        html += this._renderCatalogList(catalogItems, 'catalog-expanded');
+      }
+    } else {
+      // No inventory — show empty state + full catalog
+      html += `<div class="chem-empty-state">
+        No ${chemDef.label.toLowerCase()} in your inventory.
+        <span class="chem-empty-sub">Select a product below to log your addition.</span>
+      </div>`;
+      if (catalogItems.length > 0) {
+        html += this._renderCatalogList(catalogItems, 'catalog-full');
+      }
+    }
+
+    html += `<div class="chem-inv-link">
+      <a href="#" class="chem-manage-link" id="chemManageInv">Manage Inventory →</a>
+    </div>`;
+    html += `</div>`;
+    return html;
+  },
+
+  _renderCatalogList(items, cls) {
+    let html = `<div class="chem-product-list ${cls}">`;
+    items.forEach(p => {
+      const formLabel = p.form === 'liquid' ? 'liquid' : p.form === 'tablet' ? 'tablet' : 'granular';
+      const pkg = `${p.package_size} ${p.package_unit}/${p.form === 'liquid' ? 'bottle' : 'bag'}`;
+      html += `<div class="chem-product-card" data-product-id="${p.id}" data-source="catalog">
+        <div class="chem-product-info">
+          <div class="chem-product-name">${p.name}</div>
+          <div class="chem-product-meta">${p.brand} · ${formLabel} · ${pkg}</div>
+        </div>
+        <button class="btn btn-sm btn-secondary chem-use-btn">Use this</button>
+      </div>`;
+    });
+    html += `</div>`;
+    return html;
+  },
+
+  _renderChemQuantityStep(chemDef) {
+    const p = this.selectedProduct;
+    const unitLabel = this.chemUnit;
+    const step = this._chemStep();
+    const suggested = this._suggestQty(p);
+    const poolNote = this._poolGallons
+      ? `Suggested for ${this._poolGallons.toLocaleString()} gal pool: ${suggested} ${unitLabel}`
+      : '';
+    const formBadge = p.form ? `<span class="chem-form-badge">${p.form}</span>` : '';
+
+    return `<div class="chem-qty-section">
+      <div class="chem-qty-header">
+        <span class="chem-qty-type">${chemDef.icon} ${chemDef.label}</span>
+        <span class="chem-qty-product">${p.name} ${formBadge}</span>
+        <button class="chem-change-product" id="changeProduct">✕ Change</button>
+      </div>
+      ${poolNote ? `<div class="chem-suggested-note">${poolNote}</div>` : ''}
+      <div class="form-group">
+        <div class="form-label">Amount (${unitLabel})</div>
+        <div class="amount-stepper">
+          <button class="stepper-btn" id="chemMinus">−</button>
+          <div class="stepper-value" id="chemAmountDisplay">${this.chemQuantity}</div>
+          <button class="stepper-btn" id="chemPlus">+</button>
+        </div>
+      </div>
+      ${this.renderNotesSection('chem')}
+      <button class="btn btn-primary btn-block" id="submitChem">💧 Log ${chemDef.label}</button>
+    </div>`;
+  },
+
+  _renderChemGenericForm(chemDef) {
+    const step = this._chemStep();
+    return `<div class="chem-qty-section">
+      <div class="form-group">
+        <div class="form-label">Amount</div>
+        <div class="amount-stepper">
+          <button class="stepper-btn" id="chemMinus">−</button>
+          <div class="stepper-value" id="chemAmountDisplay">${this.chemQuantity}</div>
+          <button class="stepper-btn" id="chemPlus">+</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="form-label">Unit</div>
+        <select class="form-select" id="chemUnitSelect">
+          <option value="oz">Ounces (oz)</option>
+          <option value="lbs">Pounds (lbs)</option>
+          <option value="tabs">Tabs</option>
+          <option value="gallons">Gallons</option>
+        </select>
+      </div>
+      ${this.renderNotesSection('chem')}
+      <button class="btn btn-primary btn-block" id="submitChem">💧 Log ${chemDef.label}</button>
+    </div>`;
   },
 
   bindChemPanel() {
@@ -554,48 +685,93 @@ const QuickEntryPage = {
       btn.addEventListener('click', () => {
         this.captureState();
         this.selectedChemical = btn.dataset.chem;
-        this.chemAmount = 1;
+        this.selectedProduct = null;
+        this.chemQuantity = 1;
+        this._catalogExpanded = false;
         this.renderPanel();
       });
     });
 
-    document.querySelectorAll('.toggle-btn[data-form]').forEach(btn => {
+    document.getElementById('catalogToggle')?.addEventListener('click', () => {
+      this._catalogExpanded = !this._catalogExpanded;
+      this.renderPanel();
+    });
+
+    document.querySelectorAll('.chem-use-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        this.captureState();
-        this.chemForm = btn.dataset.form;
-        this.chemUnit = this.chemForm === 'tabs' ? '3" tabs' : 'oz';
-        this.chemAmount = 1;
+        const card = btn.closest('[data-product-id]');
+        const pid = card?.dataset.productId;
+        const source = card?.dataset.source;
+        if (!pid) return;
+
+        let product = null;
+        if (source === 'inventory') {
+          const invItem = this._inventory.find(i => i.product_id === pid);
+          // Find full product details from catalog
+          const catalogType = Chemistry.chemToCatalogType[this.selectedChemical];
+          const catalogProduct = (this._productCatalog[catalogType] || []).find(p => p.id === pid);
+          product = {
+            id: pid,
+            name: invItem?.product_name || pid,
+            brand: invItem?.product_brand || '',
+            form: catalogProduct?.form || 'granular',
+            package_unit: catalogProduct?.package_unit || 'lbs',
+            ppm_per_unit_per_10k: catalogProduct?.ppm_per_unit_per_10k || null,
+            onHand: invItem?.quantity,
+            from: 'inventory',
+          };
+        } else {
+          const catalogType = Chemistry.chemToCatalogType[this.selectedChemical];
+          const catalogProduct = (this._productCatalog[catalogType] || []).find(p => p.id === pid);
+          if (catalogProduct) {
+            product = {
+              id: pid,
+              name: catalogProduct.name,
+              brand: catalogProduct.brand,
+              form: catalogProduct.form,
+              package_unit: catalogProduct.package_unit,
+              ppm_per_unit_per_10k: catalogProduct.ppm_per_unit_per_10k || null,
+              onHand: null,
+              from: 'catalog',
+            };
+          }
+        }
+
+        if (!product) return;
+        this.selectedProduct = product;
+        this.chemUnit = this._unitFromProduct(product);
+        this.chemQuantity = this._suggestQty(product);
         this.renderPanel();
       });
     });
 
-    document.querySelectorAll('.toggle-btn[data-shock]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.captureState();
-        this.shockType = btn.dataset.shock;
-        this.renderPanel();
-      });
+    document.getElementById('changeProduct')?.addEventListener('click', () => {
+      this.selectedProduct = null;
+      this._catalogExpanded = false;
+      this.renderPanel();
     });
 
+    document.getElementById('chemManageInv')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      App.navigate('settings');
+    });
+
+    const step = this._chemStep();
     this.bindStepper('chemMinus', 'chemPlus', 'chemAmountDisplay',
-      v => this.chemAmount = v, () => this.chemAmount,
-      this.selectedChemical === 'chlorine' && this.chemForm === 'tabs' ? 1 : 0.5);
-    this.bindStepper('shockMinus', 'shockPlus', 'shockAmountDisplay',
-      v => this.shockUnits = v, () => this.shockUnits, 1);
+      v => this.chemQuantity = v, () => this.chemQuantity, step);
 
     document.getElementById('submitChem')?.addEventListener('click', () => this.submitChemical());
-    document.getElementById('submitShock')?.addEventListener('click', () => this.submitShock());
   },
 
   bindStepper(minusId, plusId, displayId, setter, getter, step = 1) {
     document.getElementById(minusId)?.addEventListener('click', () => {
-      const v = Math.max(step, getter() - step);
+      const v = Math.max(step, Math.round((getter() - step) * 100) / 100);
       setter(v);
       const el = document.getElementById(displayId);
       if (el) el.textContent = v;
     });
     document.getElementById(plusId)?.addEventListener('click', () => {
-      const v = getter() + step;
+      const v = Math.round((getter() + step) * 100) / 100;
       setter(v);
       const el = document.getElementById(displayId);
       if (el) el.textContent = v;
@@ -607,152 +783,188 @@ const QuickEntryPage = {
     try {
       const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
       const entryDate = this.entryDate;
-      const unit = this.selectedChemical === 'chlorine'
-        ? (this.chemForm === 'tabs' ? '3" tabs' : 'oz')
+      const unit = this.selectedProduct
+        ? this.chemUnit
         : (document.getElementById('chemUnitSelect')?.value || 'oz');
+      const form = this.selectedProduct?.form || null;
+
       await API.addChemical({
         chemical_type: this.selectedChemical,
-        form: this.selectedChemical === 'chlorine' ? this.chemForm : null,
-        amount: this.chemAmount,
+        form,
+        amount: this.chemQuantity,
         unit,
         ...(notes ? { notes } : {}),
         ...(entryDate ? { entry_date: entryDate } : {}),
       });
 
       const reminderName = this.pendingReminder?.display_name;
-      const chemLabel = Fmt.chemicalLabel(this.selectedChemical);
+      const chemLabel = this.selectedProduct?.name
+        || Chemistry.chemicals.find(c => c.type === this.selectedChemical)?.label
+        || this.selectedChemical;
       this.pendingReminder = null;
       this.selectedChemical = null;
-      this.chemAmount = 1;
+      this.selectedProduct = null;
+      this.chemQuantity = 1;
       this.panelNotes.chem = '';
       this.entryDate = null;
+      this._catalogExpanded = false;
 
+      Toast.success(reminderName ? `${reminderName} logged! ✅` : `${chemLabel} logged! 💧`);
       if (reminderName) {
-        Toast.success(`${reminderName} logged! ✅`);
         App.navigate('dashboard');
       } else {
-        Toast.success(`${chemLabel} logged! 💧`);
         this.renderPanel();
       }
     } catch (err) { Toast.error('Failed: ' + err.message); }
   },
 
-  async submitShock() {
-    try {
-      const entryDate = this.entryDate;
-      await API.addShock({
-        shock_type: this.shockType,
-        units: this.shockUnits,
-        ...(entryDate ? { entry_date: entryDate } : {}),
-      });
-
-      const reminderName = this.pendingReminder?.display_name;
-      this.pendingReminder = null;
-      this.shockUnits = 1;
-      this.entryDate = null;
-
-      if (reminderName) {
-        Toast.success(`${reminderName} logged! ✅`);
-        App.navigate('dashboard');
-      } else {
-        Toast.success('Pool shock logged! ⚡');
-        this.renderPanel();
-      }
-    } catch (err) { Toast.error('Failed: ' + err.message); }
-  },
-
-  // ── MAINTENANCE PANEL ───────────────────────────────────────
-  renderMaintPanel() {
-    const actions = [
-      { type: 'clean_cartridge', icon: '🔧', label: 'Clean Filter Cartridge' },
-      { type: 'add_water',       icon: '💧', label: 'Add Water' },
-      { type: 'backwash',        icon: '♻️', label: 'Backwash Filter' },
-      { type: 'brush_walls',     icon: '🖌️', label: 'Brush Walls' },
+  // ── POOL CARE PANEL ─────────────────────────────────────────
+  renderCareDateRow() {
+    const today = this._todayStr();
+    const selectedDate = this.entryDate ? new Date(this.entryDate).toISOString().split('T')[0] : today;
+    const presets = [
+      { label: 'Today',     days: 0  },
+      { label: 'Yesterday', days: 1  },
+      { label: '2 days ago', days: 2 },
+      { label: '3 days ago', days: 3 },
+      { label: 'Other…',    days: -1 },
     ];
-    const btns = actions.map(a => `<button class="quick-status-btn" data-action="${a.type}">
-      <span class="qs-icon">${a.icon}</span><span class="qs-label">${a.label}</span></button>`).join('');
-    return `${this.renderPendingReminderBanner()}
-      ${this.renderDateSelector()}
-      <div class="section-title">Log Pool Care</div>
-      <div class="quick-status-grid">${btns}</div>
-      <div class="entry-notes-divider"></div>
-      ${this.renderNotesSection('maint')}
-      <button class="btn btn-secondary btn-block" id="submitMaintNote">📝 Save Note</button>`;
+    const activeDays = this.entryDate
+      ? Math.round((new Date(today + 'T12:00:00') - new Date(this.entryDate)) / 86400000)
+      : 0;
+    const showInput = activeDays > 3;
+    const btns = presets.map(p => {
+      const isActive = (p.days === activeDays && p.days >= 0) || (p.days === -1 && showInput);
+      return `<button class="log-preset${isActive ? ' active' : ''}" data-days="${p.days}">${p.label}</button>`;
+    }).join('');
+    return `<div class="log-when-row care-date-row">
+      <span class="log-when-label">When?</span>
+      <div class="log-presets">${btns}</div>
+      <input type="date" class="log-date-input care-date-input" id="careDateInput"
+        value="${selectedDate}" max="${today}" style="display:${showInput ? 'block' : 'none'}">
+    </div>`;
   },
 
-  bindMaintPanel() {
-    this.bindDateSelector();
+  renderCarePanel() {
+    const btns = Chemistry.poolCareActions.map(a => {
+      const done = this.completedCareActions.has(a.type) ? ' qs-done' : '';
+      return `<button class="quick-status-btn${done}" data-care="${a.type}" data-basket="${a.isBasket}">
+        <span class="qs-icon">${a.icon}</span><span class="qs-label">${a.label}</span>
+      </button>`;
+    }).join('');
+    return `${this.renderPendingReminderBanner()}
+      ${this.renderCareDateRow()}
+      <div class="section-title" style="margin-top:var(--space-lg)">Pool Care</div>
+      <div class="quick-status-grid" id="careGrid">${btns}</div>
+      <div id="careFullnessWrap"></div>
+      <div class="entry-notes-divider"></div>
+      ${this.renderNotesSection('care')}
+      <button class="btn btn-secondary btn-block" id="submitCareNote">📝 Save Note</button>`;
+  },
+
+  bindCarePanel() {
     this.bindPendingReminderBanner();
 
-    document.querySelectorAll('.quick-status-btn[data-action]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        try {
-          const entryDate = this.entryDate;
-          await API.addMaintenance({
-            action_type: btn.dataset.action,
-            ...(entryDate ? { entry_date: entryDate } : {}),
-          });
-          btn.classList.add('qs-done');
-          Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
-        } catch (err) { Toast.error('Failed: ' + err.message); }
+    // Date preset bindings
+    document.querySelectorAll('.care-date-row .log-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.care-date-row .log-preset').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const days = parseInt(btn.dataset.days);
+        const dateInput = document.getElementById('careDateInput');
+        if (days === -1) {
+          dateInput.style.display = 'block';
+          dateInput.focus();
+        } else {
+          dateInput.style.display = 'none';
+          const d = new Date();
+          d.setDate(d.getDate() - days);
+          const iso = d.toISOString().split('T')[0];
+          dateInput.value = iso;
+          this.entryDate = days === 0 ? null : this._dateInputToISO(iso);
+        }
       });
     });
 
-    document.getElementById('submitMaintNote')?.addEventListener('click', async () => {
-      const text = document.getElementById('panelNoteText')?.value?.trim();
-      if (!text) { Toast.info('Enter a note first'); return; }
-      try {
-        const entryDate = this.entryDate;
-        await API.addNote(text, entryDate);
-        Toast.success('Note saved! 📝');
-        document.getElementById('panelNoteText').value = '';
-        this.panelNotes.maint = '';
-      } catch (err) { Toast.error('Failed: ' + err.message); }
+    document.getElementById('careDateInput')?.addEventListener('change', e => {
+      this.entryDate = this._dateInputToISO(e.target.value);
     });
-  },
 
-  // ── QUICK STATUS PANEL ──────────────────────────────────────
-  renderStatusPanel() {
-    const btns = Chemistry.quickStatuses.map(s => {
-      const done = this.completedStatuses.has(s.type) ? ' qs-done' : '';
-      return `<button class="quick-status-btn${done}" data-status="${s.type}">
-        <span class="qs-icon">${s.icon}</span><span class="qs-label">${s.label}</span></button>`;
-    }).join('');
-    return `${this.renderDateSelector()}
-      <div class="section-title">Quick Check</div>
-      <div class="quick-status-grid">${btns}</div>
-      <div class="entry-notes-divider"></div>
-      ${this.renderNotesSection('status')}
-      <button class="btn btn-secondary btn-block" id="submitStatusNote">📝 Save Note</button>`;
-  },
-
-  bindStatusPanel() {
-    this.bindDateSelector();
-
-    document.querySelectorAll('.quick-status-btn[data-status]').forEach(btn => {
+    // Care action button bindings
+    document.querySelectorAll('.quick-status-btn[data-care]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        try {
-          const entryDate = this.entryDate;
-          await API.addQuickStatus({
-            status_type: btn.dataset.status,
-            ...(entryDate ? { entry_date: entryDate } : {}),
+        const taskType = btn.dataset.care;
+        const isBasket = btn.dataset.basket === 'true';
+
+        if (this.completedCareActions.has(taskType)) {
+          Toast.info(`${btn.querySelector('.qs-label').textContent} already logged ✅`);
+          return;
+        }
+
+        if (isBasket) {
+          // Show inline fullness picker — remove any existing one first
+          const wrap = document.getElementById('careFullnessWrap');
+          const alreadyOpen = wrap.dataset.task === taskType && wrap.innerHTML;
+          wrap.innerHTML = '';
+          wrap.dataset.task = '';
+          if (alreadyOpen) return;
+
+          wrap.dataset.task = taskType;
+          wrap.innerHTML = `
+            <div class="care-fullness-row">
+              <span class="log-when-label">How full?</span>
+              <div class="log-fullness-btns">
+                <button class="log-fullness-btn" data-fullness="0">Empty</button>
+                <button class="log-fullness-btn" data-fullness="25">¼ Full</button>
+                <button class="log-fullness-btn" data-fullness="50">½ Full</button>
+                <button class="log-fullness-btn" data-fullness="75">¾ Full</button>
+                <button class="log-fullness-btn" data-fullness="100">Full</button>
+              </div>
+            </div>`;
+
+          wrap.querySelectorAll('.log-fullness-btn').forEach(fb => {
+            fb.addEventListener('click', async () => {
+              const fullness = parseInt(fb.dataset.fullness);
+              try {
+                const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
+                await API.logPoolCareAction({
+                  task_type: taskType,
+                  ...(this.entryDate ? { entry_date: this.entryDate } : {}),
+                  ...(notes ? { notes } : {}),
+                  fullness,
+                });
+                this.completedCareActions.add(taskType);
+                btn.classList.add('qs-done');
+                wrap.innerHTML = '';
+                wrap.dataset.task = '';
+                Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
+              } catch (err) { Toast.error('Failed: ' + err.message); }
+            });
           });
-          this.completedStatuses.add(btn.dataset.status);
-          btn.classList.add('qs-done');
-          Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
-        } catch (err) { Toast.error('Failed: ' + err.message); }
+        } else {
+          try {
+            const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
+            await API.logPoolCareAction({
+              task_type: taskType,
+              ...(this.entryDate ? { entry_date: this.entryDate } : {}),
+              ...(notes ? { notes } : {}),
+            });
+            this.completedCareActions.add(taskType);
+            btn.classList.add('qs-done');
+            Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
+          } catch (err) { Toast.error('Failed: ' + err.message); }
+        }
       });
     });
 
-    document.getElementById('submitStatusNote')?.addEventListener('click', async () => {
+    document.getElementById('submitCareNote')?.addEventListener('click', async () => {
       const text = document.getElementById('panelNoteText')?.value?.trim();
       if (!text) { Toast.info('Enter a note first'); return; }
       try {
-        const entryDate = this.entryDate;
-        await API.addNote(text, entryDate);
+        await API.addNote(text, this.entryDate);
         Toast.success('Note saved! 📝');
         document.getElementById('panelNoteText').value = '';
-        this.panelNotes.status = '';
+        this.panelNotes.care = '';
       } catch (err) { Toast.error('Failed: ' + err.message); }
     });
   },

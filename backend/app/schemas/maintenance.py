@@ -68,3 +68,10 @@ class ShockCreate(BaseModel):
 class NoteCreate(BaseModel):
     notes: str
     entry_date: Optional[datetime] = None
+
+
+class PoolCareActionCreate(BaseModel):
+    task_type: str
+    entry_date: Optional[datetime] = None
+    notes: Optional[str] = None
+    fullness: Optional[int] = None  # 0-100, for basket tasks only

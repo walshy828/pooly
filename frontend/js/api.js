@@ -34,6 +34,7 @@ const API = {
   // Maintenance
   addMaintenance(data) { return this._fetch('/maintenance', { method: 'POST', body: data }); },
   dismissMaintenance(taskType) { return this._fetch(`/maintenance/dismiss/${taskType}`, { method: 'POST' }); },
+  logPoolCareAction(data) { return this._fetch('/pool-care', { method: 'POST', body: data }); },
   addShock(data) { return this._fetch('/shock', { method: 'POST', body: data }); },
   addObservation(data) { return this._fetch('/observations', { method: 'POST', body: data }); },
   addQuickStatus(data) { return this._fetch('/quick-status', { method: 'POST', body: data }); },
