@@ -11,7 +11,7 @@ from app.models.journal import (
     AlgaeLevel,
 )
 from app.models.sensor import SensorReading, WeatherSnapshot
-from app.models.config import PoolConfig, MaintenanceSchedule, ChemicalInventoryItem
+from app.models.config import PoolConfig, MaintenanceSchedule, ChemicalInventoryItem, UserProductCatalog
 from app.models.treatment_plan import TreatmentPlan, TreatmentStep, PlanType, PlanStatus, ActionType
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "PoolConfig",
     "MaintenanceSchedule",
     "ChemicalInventoryItem",
+    "UserProductCatalog",
     "TreatmentPlan",
     "TreatmentStep",
     "PlanType",

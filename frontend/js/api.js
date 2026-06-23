@@ -87,6 +87,15 @@ const API = {
   saveChemicalInventory(items) { return this._fetch('/chemical-inventory', { method: 'PUT', body: items }); },
   getChemicalProducts() { return this._fetch('/chemical-inventory/products'); },
 
+  // Product Catalog (custom products + built-in preferences)
+  getAllProducts() { return this._fetch('/products'); },
+  createProduct(data) { return this._fetch('/products', { method: 'POST', body: data }); },
+  updateProduct(catalogId, data) { return this._fetch(`/products/${catalogId}`, { method: 'PUT', body: data }); },
+  deleteProduct(catalogId) { return this._fetch(`/products/${catalogId}`, { method: 'DELETE' }); },
+  toggleBuiltinProduct(productId, enabled) {
+    return this._fetch(`/products/builtin/${productId}/enabled`, { method: 'PATCH', body: { enabled } });
+  },
+
   // AI Insights (optional Claude layer)
   getAiStatus() { return this._fetch('/ai/status'); },
   updateAiSettings(data) { return this._fetch('/ai/settings', { method: 'PUT', body: data }); },

@@ -49,6 +49,28 @@ class ChemicalInventoryItem(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class UserProductCatalog(Base):
+    """User-managed product catalog: custom products + built-in product preferences."""
+
+    __tablename__ = "user_product_catalog"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pool_config_id: Mapped[int] = mapped_column(ForeignKey("pool_config.id", ondelete="CASCADE"))
+    product_id: Mapped[str] = mapped_column(String(100))   # "custom_<id>" or built-in key
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Fields used only for custom products (nullable for built-in override rows)
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    product_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    form: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    package_size: Mapped[float | None] = mapped_column(Float, nullable=True)
+    package_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class MaintenanceSchedule(Base):
     """Configurable maintenance reminder tasks."""
 
