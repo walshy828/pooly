@@ -8,10 +8,12 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import PoolConfig, Measurement, PoolObservation, ChemicalInventoryItem
 from app.models.treatment_plan import TreatmentPlan, TreatmentStep
+from app.models.sensor import WeatherSnapshot
 from app.schemas.treatment_plan import (
     TreatmentPlanResponse, GeneratePlanRequest, CompleteStepRequest
 )
-from app.services.treatment_plan import generate_plan
+from app.services.treatment_plan import generate_plan, annotate_with_weather
+from app.services.weather import parse_daily_forecast
 
 router = APIRouter(prefix="/api/treatment-plans", tags=["treatment-plans"])
 
@@ -19,8 +21,47 @@ CHEMISTRY_PARAMS = ["ph", "free_chlorine", "total_chlorine", "alkalinity",
                     "cyanuric_acid", "calcium_hardness", "bromine"]
 
 
-def _plan_to_response(plan: TreatmentPlan) -> dict:
+async def _fetch_daily_forecast(db: AsyncSession) -> list:
+    """Return the latest stored 5-day daily forecast, or empty list if unavailable."""
+    result = await db.execute(
+        select(WeatherSnapshot).order_by(desc(WeatherSnapshot.fetched_at)).limit(1)
+    )
+    snap = result.scalar_one_or_none()
+    if snap and snap.forecast_data:
+        return parse_daily_forecast(snap.forecast_data)
+    return []
+
+
+def _plan_to_response(plan: TreatmentPlan, daily_forecast: list = []) -> dict:
     steps = sorted(plan.steps, key=lambda s: s.step_order)
+
+    # Build step dicts then annotate with weather notes
+    step_dicts = [
+        {
+            "id": s.id,
+            "plan_id": s.plan_id,
+            "step_order": s.step_order,
+            "title": s.title,
+            "description": s.description,
+            "action_type": s.action_type,
+            "product_id": s.product_id,
+            "product_name": s.product_name,
+            "amount": s.amount,
+            "unit": s.unit,
+            "bags_needed": s.bags_needed,
+            "wait_hours_after": s.wait_hours_after,
+            "why": s.why,
+            "safety_notes": s.safety_notes,
+            "alternative_products": s.alternative_products or [],
+            "is_completed": s.is_completed,
+            "completed_at": s.completed_at,
+            "user_notes": s.user_notes,
+            "weather_note": None,
+        }
+        for s in steps
+    ]
+    annotate_with_weather(step_dicts, daily_forecast)
+
     return {
         "id": plan.id,
         "pool_config_id": plan.pool_config_id,
@@ -33,31 +74,10 @@ def _plan_to_response(plan: TreatmentPlan) -> dict:
         "notes": plan.notes,
         "created_at": plan.created_at,
         "completed_at": plan.completed_at,
-        "steps": [
-            {
-                "id": s.id,
-                "plan_id": s.plan_id,
-                "step_order": s.step_order,
-                "title": s.title,
-                "description": s.description,
-                "action_type": s.action_type,
-                "product_id": s.product_id,
-                "product_name": s.product_name,
-                "amount": s.amount,
-                "unit": s.unit,
-                "bags_needed": s.bags_needed,
-                "wait_hours_after": s.wait_hours_after,
-                "why": s.why,
-                "safety_notes": s.safety_notes,
-                "alternative_products": s.alternative_products or [],
-                "is_completed": s.is_completed,
-                "completed_at": s.completed_at,
-                "user_notes": s.user_notes,
-            }
-            for s in steps
-        ],
-        "steps_total": len(steps),
-        "steps_completed": sum(1 for s in steps if s.is_completed),
+        "weather_forecast": daily_forecast,
+        "steps": step_dicts,
+        "steps_total": len(step_dicts),
+        "steps_completed": sum(1 for s in step_dicts if s["is_completed"]),
     }
 
 
@@ -96,7 +116,6 @@ async def generate_treatment_plan(
             if val is not None:
                 measurements[param] = val
         water_clarity = latest_meas.water_clarity
-        # Use measurement's algae_level if not overridden in request
         if algae_level is None and latest_meas.algae_level:
             algae_level = latest_meas.algae_level
 
@@ -177,14 +196,15 @@ async def generate_treatment_plan(
 
     await db.commit()
 
-    # Reload with steps
+    # Reload with steps and fetch weather
     reload_result = await db.execute(
         select(TreatmentPlan)
         .where(TreatmentPlan.id == plan.id)
         .options(selectinload(TreatmentPlan.steps))
     )
     plan = reload_result.scalar_one()
-    return _plan_to_response(plan)
+    daily_forecast = await _fetch_daily_forecast(db)
+    return _plan_to_response(plan, daily_forecast)
 
 
 @router.get("")
@@ -202,7 +222,8 @@ async def list_treatment_plans(db: AsyncSession = Depends(get_db)):
         .limit(20)
     )
     plans = result.scalars().all()
-    return [_plan_to_response(p) for p in plans]
+    daily_forecast = await _fetch_daily_forecast(db)
+    return [_plan_to_response(p, daily_forecast) for p in plans]
 
 
 @router.get("/{plan_id}")
@@ -215,7 +236,8 @@ async def get_treatment_plan(plan_id: int, db: AsyncSession = Depends(get_db)):
     plan = result.scalar_one_or_none()
     if not plan:
         raise HTTPException(status_code=404, detail="Treatment plan not found")
-    return _plan_to_response(plan)
+    daily_forecast = await _fetch_daily_forecast(db)
+    return _plan_to_response(plan, daily_forecast)
 
 
 @router.patch("/{plan_id}/steps/{step_id}")
@@ -254,7 +276,8 @@ async def complete_step(
     await db.commit()
     await db.refresh(step)
 
-    return _plan_to_response(plan)
+    daily_forecast = await _fetch_daily_forecast(db)
+    return _plan_to_response(plan, daily_forecast)
 
 
 @router.post("/{plan_id}/cancel")
@@ -270,4 +293,5 @@ async def cancel_plan(plan_id: int, db: AsyncSession = Depends(get_db)):
 
     plan.status = "cancelled"
     await db.commit()
-    return _plan_to_response(plan)
+    daily_forecast = await _fetch_daily_forecast(db)
+    return _plan_to_response(plan, daily_forecast)

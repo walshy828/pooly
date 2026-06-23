@@ -201,6 +201,9 @@ const TreatmentPlanPage = {
           </button>
         </div>` : ''}
 
+        <!-- 5-day weather forecast strip -->
+        ${this._buildWeatherStrip(plan.weather_forecast)}
+
         <!-- Steps timeline -->
         <div id="tpStepsList" style="margin-top:12px;position:relative">
           ${steps.map((step, idx) => this.buildStepHTML(step, idx, steps)).join('')}
@@ -255,6 +258,10 @@ const TreatmentPlanPage = {
     const safetyHtml = step.safety_notes
       ? `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(255,159,10,0.08);border:1px solid rgba(255,159,10,0.2);font-size:12px;color:#FF9F0A">⚠️ ${step.safety_notes}</div>` : '';
 
+    const weatherHtml = step.weather_note
+      ? `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(56,131,255,0.08);border:1px solid rgba(56,131,255,0.22);font-size:12px;color:#93C5FD;line-height:1.5">${step.weather_note}</div>`
+      : '';
+
     const whyHtml = step.why
       ? `<details style="margin-top:8px">
           <summary style="font-size:12px;color:rgba(245,245,247,0.4);cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px">
@@ -304,6 +311,7 @@ const TreatmentPlanPage = {
           </div>
           ${isCompleted && step.completed_at ? `<div style="font-size:11px;color:rgba(245,245,247,0.3);margin-bottom:6px">Completed ${this._formatDate(step.completed_at)}</div>` : ''}
           ${step.description ? `<div style="font-size:13px;color:rgba(245,245,247,0.55);line-height:1.5;margin-bottom:4px">${step.description}</div>` : ''}
+          ${weatherHtml}
           ${amountHtml}
           ${waitHtml}
           ${safetyHtml}
@@ -396,6 +404,33 @@ const TreatmentPlanPage = {
         } catch (err) { Toast.error('Failed to undo: ' + err.message); }
       });
     });
+  },
+
+  // ── Weather Strip ────────────────────────────────────────
+
+  _buildWeatherStrip(forecast) {
+    if (!forecast?.length) return '';
+    const days = forecast.slice(0, 5).map(f => {
+      const emoji = f.is_heavy_rain_day ? '⛈️' : f.is_rain_day ? '🌧️' : '☀️';
+      const labelColor = f.is_rain_day ? '#93C5FD' : 'rgba(245,245,247,0.4)';
+      const label = f.is_heavy_rain_day ? 'Storm' : f.is_rain_day ? 'Rain' : 'Clear';
+      return `
+        <div style="flex:1;text-align:center;padding:6px 2px">
+          <div style="font-size:11px;color:rgba(245,245,247,0.3);margin-bottom:3px">${f.weekday_short || ''}</div>
+          <div style="font-size:1.3rem">${emoji}</div>
+          <div style="font-size:10px;font-weight:500;color:${labelColor};margin-top:3px">${label}</div>
+        </div>`;
+    }).join('');
+
+    const hasRain = forecast.slice(0, 5).some(f => f.is_rain_day);
+    return `
+      <div class="bento-card stagger-2" style="margin-top:12px;padding:12px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(245,245,247,0.35)">5-Day Forecast</div>
+          ${hasRain ? `<div style="font-size:11px;color:#93C5FD">🌧️ Rain may affect plan steps</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px">${days}</div>
+      </div>`;
   },
 
   // ── Helpers ──────────────────────────────────────────────

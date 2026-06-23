@@ -778,3 +778,79 @@ def generate_plan(
         "pool_gallons": int(pool_gal),
         "steps": steps,
     }
+
+
+# ─── WEATHER ANNOTATION ──────────────────────────────────────────────────────────
+
+WEATHER_SENSITIVITY = {
+    "run_pump": "none",
+    "wait": "none",
+    "mechanical": "low",
+    "test": "medium",
+    "add_chemical": "medium",
+}
+
+
+def _step_sensitivity(step: dict) -> str:
+    if "shock" in step.get("title", "").lower():
+        return "high"
+    return WEATHER_SENSITIVITY.get(step.get("action_type", ""), "none")
+
+
+def _find_next_clear_day(daily_forecast: list, from_day: int) -> dict | None:
+    for f in daily_forecast:
+        if f.get("day_offset", 0) > from_day and not f.get("is_rain_day", False):
+            return f
+    return None
+
+
+def annotate_with_weather(steps: list[dict], daily_forecast: list[dict]) -> list[dict]:
+    """Add a weather_note to each step that is weather-sensitive and falls on a rainy day.
+
+    Notes are advisory only — they do not reorder or remove steps.
+    Day offset is projected from cumulative wait_hours_after of preceding steps.
+    """
+    if not daily_forecast:
+        for step in steps:
+            step.setdefault("weather_note", None)
+        return steps
+
+    forecast_by_offset = {f["day_offset"]: f for f in daily_forecast}
+    cumulative_hours = 0.0
+
+    for step in steps:
+        day_offset = int(cumulative_hours // 24)
+        weather = forecast_by_offset.get(day_offset)
+        sensitivity = _step_sensitivity(step)
+        note = None
+
+        if weather and sensitivity != "none":
+            day_label = weather.get("weekday", "that day")
+            is_rain = weather.get("is_rain_day", False)
+            is_heavy = weather.get("is_heavy_rain_day", False)
+
+            if sensitivity == "high" and is_rain:
+                clear = _find_next_clear_day(daily_forecast, day_offset)
+                if clear:
+                    note = f"🌧️ Rain expected {day_label}. Consider delaying until {clear['weekday']}."
+                else:
+                    note = f"🌧️ Rain expected {day_label}. Monitor forecast and delay if heavy rain."
+            elif sensitivity == "medium":
+                action = step.get("action_type")
+                if is_heavy:
+                    if action == "test":
+                        note = f"🌧️ Heavy rain expected {day_label} — wait 24h after rain clears before testing."
+                    else:
+                        note = f"🌧️ Heavy rain expected {day_label}. Best to add chemicals before or after rain."
+                elif is_rain:
+                    if action == "test":
+                        note = f"🌧️ Rain expected {day_label} — wait until rain clears before testing."
+                    else:
+                        note = f"🌧️ Rain expected {day_label}. Consider timing around rain if possible."
+            elif sensitivity == "low" and is_heavy:
+                note = f"🌧️ Heavy rain expected {day_label}. Task can still be done but conditions will be wet."
+
+        step["weather_note"] = note
+        cumulative_hours += step.get("wait_hours_after") or 0
+
+    return steps

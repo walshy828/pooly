@@ -49,7 +49,12 @@ const SettingsPage = {
           ${this._field('Pool Type',         `<select id="poolType"><option value="above_ground"${d.pool?.pool_type==='above_ground'?' selected':''}>Above Ground</option><option value="in_ground"${d.pool?.pool_type==='in_ground'?' selected':''}>In Ground</option></select>`)}
           ${this._field('Sanitizer',         `<select id="poolSanitizer"><option value="chlorine"${d.pool?.sanitizer_type==='chlorine'?' selected':''}>Chlorine</option><option value="salt"${d.pool?.sanitizer_type==='salt'?' selected':''}>Salt</option><option value="bromine"${d.pool?.sanitizer_type==='bromine'?' selected':''}>Bromine</option></select>`)}
           ${this._field('Filter Type',       `<select id="poolFilter"><option value="cartridge"${d.pool?.filter_type==='cartridge'?' selected':''}>Cartridge</option><option value="sand"${d.pool?.filter_type==='sand'?' selected':''}>Sand</option><option value="de"${d.pool?.filter_type==='de'?' selected':''}>DE</option></select>`)}
-          <div style="padding:14px 16px">
+          ${this._field('Location Latitude',  `<input type="number" id="poolLat" step="0.0001" value="${d.pool?.location_lat||''}" placeholder="e.g. 40.7128">`)}
+          ${this._field('Location Longitude', `<input type="number" id="poolLon" step="0.0001" value="${d.pool?.location_lon||''}" placeholder="e.g. -74.0060">`)}
+          <div style="padding:0 16px 10px">
+            <div style="font-size:11px;color:rgba(245,245,247,0.3);line-height:1.5">📍 Used for weather forecast in treatment plans. Overridden by WEATHER_LAT/LON env vars if set.</div>
+          </div>
+          <div style="padding:4px 16px 14px">
             <button class="btn btn-primary" id="savePool" style="width:100%;height:48px">Save Pool Profile</button>
           </div>
         </div>
@@ -638,6 +643,8 @@ const SettingsPage = {
           pool_type:       document.getElementById('poolType').value,
           sanitizer_type:  document.getElementById('poolSanitizer').value,
           filter_type:     document.getElementById('poolFilter').value,
+          location_lat:    parseFloat(document.getElementById('poolLat').value) || null,
+          location_lon:    parseFloat(document.getElementById('poolLon').value) || null,
         });
         Toast.success('Pool configuration saved! ⚙️');
       } catch (err) { Toast.error('Failed to save: ' + err.message); }

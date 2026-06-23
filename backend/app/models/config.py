@@ -27,6 +27,9 @@ class PoolConfig(Base):
     pool_status: Mapped[str] = mapped_column(String(20), default="open")  # open, closed
     pool_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pool_closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Pool location — used for weather forecast when env vars not set
+    location_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Optional AI insights — off by default; key stored server-side, never returned verbatim
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     ai_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)

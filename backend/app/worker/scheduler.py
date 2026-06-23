@@ -62,12 +62,29 @@ async def prune_sensor_readings():
 
 
 async def poll_weather():
-    """Fetch weather data and store snapshot."""
-    if not settings.weather_enabled:
+    """Fetch weather data and store snapshot.
+
+    Uses env-var lat/lon if configured; falls back to pool_config location columns.
+    """
+    lat = settings.WEATHER_LAT
+    lon = settings.WEATHER_LON
+
+    # If env vars aren't set, try to pull location from pool config
+    if (lat is None or lon is None) and settings.WEATHER_API_KEY:
+        async with async_session() as db:
+            from app.models import PoolConfig
+            from sqlalchemy import select
+            result = await db.execute(select(PoolConfig).limit(1))
+            pool = result.scalar_one_or_none()
+            if pool:
+                lat = lat if lat is not None else pool.location_lat
+                lon = lon if lon is not None else pool.location_lon
+
+    if not (settings.WEATHER_API_KEY and lat is not None and lon is not None):
         return
 
     now = datetime.now(timezone.utc)
-    data = await fetch_weather()
+    data = await fetch_weather(lat=lat, lon=lon)
     if data:
         async with async_session() as db:
             db.add(WeatherSnapshot(

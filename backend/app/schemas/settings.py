@@ -16,6 +16,8 @@ class PoolConfigUpdate(BaseModel):
     sanitizer_type: Optional[str] = None
     filter_type: Optional[str] = None
     notes: Optional[str] = None
+    location_lat: Optional[float] = None
+    location_lon: Optional[float] = None
 
 
 class PoolConfigResponse(BaseModel):
