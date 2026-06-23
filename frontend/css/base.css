@@ -24,16 +24,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Subtle animated background gradient */
+/* Ambient pool-water background — layered caustics with a slow drift */
 body::before {
   content: '';
   position: fixed;
-  inset: 0;
-  background: 
-    radial-gradient(ellipse at 20% 0%, rgba(11, 79, 108, 0.3) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 100%, rgba(32, 178, 170, 0.15) 0%, transparent 50%);
+  inset: -8%;
+  background:
+    radial-gradient(ellipse at 18% -5%, rgba(26, 123, 168, 0.34) 0%, transparent 58%),
+    radial-gradient(ellipse at 85% 105%, rgba(32, 178, 170, 0.18) 0%, transparent 52%),
+    radial-gradient(circle at 70% 25%, rgba(28, 200, 238, 0.10) 0%, transparent 40%),
+    radial-gradient(circle at 30% 80%, rgba(11, 79, 108, 0.22) 0%, transparent 45%);
   pointer-events: none;
   z-index: 0;
+  will-change: transform;
+  animation: bgDrift 36s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 
 #app {

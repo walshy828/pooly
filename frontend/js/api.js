@@ -85,4 +85,13 @@ const API = {
   getChemicalInventory() { return this._fetch('/chemical-inventory'); },
   saveChemicalInventory(items) { return this._fetch('/chemical-inventory', { method: 'PUT', body: items }); },
   getChemicalProducts() { return this._fetch('/chemical-inventory/products'); },
+
+  // AI Insights (optional Claude layer)
+  getAiStatus() { return this._fetch('/ai/status'); },
+  updateAiSettings(data) { return this._fetch('/ai/settings', { method: 'PUT', body: data }); },
+  testAiKey(data = {}) { return this._fetch('/ai/test', { method: 'POST', body: data }); },
+  getAiInsights() { return this._fetch('/ai/insights', { method: 'POST', body: {} }); },
+  getPlanRationale(planId = null) {
+    return this._fetch('/ai/plan-rationale', { method: 'POST', body: planId ? { plan_id: planId } : {} });
+  },
 };

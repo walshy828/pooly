@@ -6,7 +6,11 @@ const TreatmentPlanPage = {
   async render(container) {
     container.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div></div>`;
     try {
-      const plans = await API.getTreatmentPlans();
+      const [plans, aiStatus] = await Promise.all([
+        API.getTreatmentPlans(),
+        API.getAiStatus().catch(() => ({ enabled: false })),
+      ]);
+      this._aiStatus = aiStatus;
       const active = plans.find(p => p.status === 'active');
       if (active) {
         this._plan = active;
@@ -153,6 +157,12 @@ const TreatmentPlanPage = {
           </div>`}
         </div>
 
+        ${this._aiStatus && this._aiStatus.enabled ? `
+        <div class="tp-ai-block">
+          <div class="tp-ai-intro" id="tpAiIntro"></div>
+          <button class="btn btn-secondary btn-block tp-explain-btn" id="tpExplainBtn">✨ Explain this plan</button>
+        </div>` : ''}
+
         <div class="tp-steps-list" id="tpStepsList">
           ${steps.map((step, idx) => this.buildStepHTML(step, idx, steps)).join('')}
         </div>
@@ -245,6 +255,7 @@ const TreatmentPlanPage = {
         ${waitHtml}
         ${safetyHtml}
         ${whyHtml}
+        <div class="tp-ai-why" id="aiwhy-${step.step_order}"></div>
         ${altHtml}
         ${step.user_notes ? `<div class="tp-step-user-note">📝 ${step.user_notes}</div>` : ''}
         <div class="tp-step-footer">
@@ -254,7 +265,40 @@ const TreatmentPlanPage = {
       </div>`;
   },
 
+  _escape(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  },
+
+  async loadRationale() {
+    const btn = document.getElementById('tpExplainBtn');
+    if (!this._plan) return;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Thinking...'; }
+    try {
+      const res = await API.getPlanRationale(this._plan.id);
+      const introEl = document.getElementById('tpAiIntro');
+      if (introEl && res.intro) {
+        introEl.innerHTML = `<span class="ai-badge">✨ AI Insights</span><p class="ai-briefing-text">${this._escape(res.intro)}</p>`;
+        introEl.classList.add('filled');
+      }
+      Object.entries(res.step_why || {}).forEach(([order, why]) => {
+        const el = document.getElementById('aiwhy-' + order);
+        if (el) {
+          el.innerHTML = `<span class="tp-ai-why-label">✨ Why:</span> ${this._escape(why)}`;
+          el.classList.add('filled');
+        }
+      });
+      if (btn) btn.textContent = '✨ Explained';
+    } catch (err) {
+      Toast.error('Could not explain plan: ' + err.message);
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Explain this plan'; }
+    }
+  },
+
   bindPlan() {
+    document.getElementById('tpExplainBtn')?.addEventListener('click', () => this.loadRationale());
+
     document.getElementById('newPlanBtn')?.addEventListener('click', async () => {
       if (this._plan && this._plan.status === 'active') {
         if (!confirm('Start a new plan? Your current plan will be cancelled.')) return;

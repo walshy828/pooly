@@ -7,15 +7,21 @@ const DashboardPage = {
   async render(container) {
     container.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div></div>`;
     try {
-      const [data, trends] = await Promise.all([
+      const [data, trends, aiStatus, plans] = await Promise.all([
         API.getDashboard(),
-        API.getTrends(30).catch(() => ({}))
+        API.getTrends(30).catch(() => ({})),
+        API.getAiStatus().catch(() => ({ enabled: false })),
+        API.getTreatmentPlans().catch(() => []),
       ]);
       this.trends = trends;
       this._trendDays = 30;
+      this.aiStatus = aiStatus;
+      this.activePlan = (plans || []).find(p => p.status === 'active') || null;
       container.innerHTML = this.buildHTML(data);
       this.bindReminders();
       this.bindTrendToggle();
+      this.bindBriefing();
+      if (aiStatus && aiStatus.enabled) this.loadBriefing();
     } catch (err) {
       container.innerHTML = `
         <div class="empty-state">
@@ -29,13 +35,86 @@ const DashboardPage = {
     return `
       <div class="dashboard container">
         ${d.pool_status === 'closed' ? this.renderClosedBanner(d) : ''}
+        ${this.renderAiBriefing()}
         ${this.renderStatusHero(d)}
         ${this.renderActionCenter(d)}
+        ${this.renderPlanStrip()}
         ${this.renderChemistryPanel(d)}
         ${this.renderTrends()}
         ${this.renderWeatherInsights(d)}
         ${this.renderReminders(d)}
         ${this.renderRecent(d)}
+      </div>`;
+  },
+
+  // ── AI Briefing (optional) ────────────────────────────────────
+  _escape(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  },
+
+  renderAiBriefing() {
+    if (!this.aiStatus || !this.aiStatus.enabled) return '';
+    return `
+      <div class="ai-briefing card slide-up" id="aiBriefingCard">
+        <div class="ai-briefing-head">
+          <span class="ai-badge">✨ AI Insights</span>
+          <button class="ai-regen-btn" id="aiRegenBtn" title="Regenerate">↻</button>
+        </div>
+        <div class="ai-briefing-body" id="aiBriefingBody">
+          <div class="ai-skeleton"><span></span><span></span><span></span></div>
+        </div>
+      </div>`;
+  },
+
+  bindBriefing() {
+    document.getElementById('aiRegenBtn')?.addEventListener('click', () => this.loadBriefing());
+  },
+
+  async loadBriefing() {
+    const body = document.getElementById('aiBriefingBody');
+    const btn = document.getElementById('aiRegenBtn');
+    if (!body) return;
+    body.innerHTML = `<div class="ai-skeleton"><span></span><span></span><span></span></div>`;
+    btn?.classList.add('ai-spinning');
+    try {
+      const res = await API.getAiInsights();
+      body.innerHTML = `<p class="ai-briefing-text">${this._escape(res.briefing)}</p>`;
+    } catch (err) {
+      body.innerHTML = `<p class="ai-briefing-error">Couldn't generate insights right now. <button class="ai-retry-link" id="aiRetry">Try again</button></p>`;
+      document.getElementById('aiRetry')?.addEventListener('click', () => this.loadBriefing());
+    } finally {
+      btn?.classList.remove('ai-spinning');
+    }
+  },
+
+  // ── Active Treatment Plan strip ───────────────────────────────
+  renderPlanStrip() {
+    const plan = this.activePlan;
+    if (!plan) {
+      return `
+        <div class="plan-strip plan-strip-empty" onclick="App.navigate('treatment-plan')">
+          <div class="plan-strip-icon">🧪</div>
+          <div class="plan-strip-main">
+            <div class="plan-strip-title">No active treatment plan</div>
+            <div class="plan-strip-sub">Build a step-by-step plan to get your water dialed in.</div>
+          </div>
+          <span class="plan-strip-arrow">›</span>
+        </div>`;
+    }
+    const total = plan.steps_total || 0;
+    const done = plan.steps_completed || 0;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return `
+      <div class="plan-strip" onclick="App.navigate('treatment-plan')">
+        <div class="plan-strip-icon">🧪</div>
+        <div class="plan-strip-main">
+          <div class="plan-strip-title">${this._escape(plan.condition_label)}</div>
+          <div class="plan-strip-sub">${done} of ${total} steps complete</div>
+          <div class="plan-strip-bar"><div class="plan-strip-fill" style="width:${pct}%"></div></div>
+        </div>
+        <span class="plan-strip-arrow">Resume ›</span>
       </div>`;
   },
 

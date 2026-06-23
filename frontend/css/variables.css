@@ -8,6 +8,11 @@
   --color-accent-light: #3DCDC5;
   --color-accent-glow: rgba(32, 178, 170, 0.3);
 
+  /* AI accent — distinct premium hue for AI-generated content */
+  --ai-accent: #A99CF5;
+  --ai-tint: rgba(169, 156, 245, 0.10);
+  --ai-border: rgba(169, 156, 245, 0.28);
+
   /* Semantic colors */
   --color-success: #2ECC71;
   --color-success-bg: rgba(46, 204, 113, 0.12);

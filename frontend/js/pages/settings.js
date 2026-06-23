@@ -6,13 +6,15 @@ const SettingsPage = {
   async render(container) {
     container.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div></div>`;
     try {
-      const [data, inventory, products] = await Promise.all([
+      const [data, inventory, products, aiStatus] = await Promise.all([
         API.getSettings(),
         API.getChemicalInventory().catch(() => []),
         API.getChemicalProducts().catch(() => ({})),
+        API.getAiStatus().catch(() => ({ enabled: false, key_set: false, model: 'claude-opus-4-8' })),
       ]);
       this._inventory = inventory;
       this._products = products;
+      this._aiStatus = aiStatus;
       container.innerHTML = this.buildHTML(data);
       this.bind(data);
     } catch (err) {
@@ -70,6 +72,8 @@ const SettingsPage = {
         </div>
 
         ${this.renderInventorySection()}
+
+        ${this.renderAiSection()}
 
         <div class="settings-group">
           <div class="section-title">Pool Care Schedules</div>
@@ -176,6 +180,112 @@ const SettingsPage = {
           </div>
         </div>
       </div>`;
+  },
+
+  renderAiSection() {
+    const ai = this._aiStatus || {};
+    const enabled = !!ai.enabled;
+    const keySet = !!ai.key_set;
+    const model = ai.model || 'claude-opus-4-8';
+    const keyHint = keySet
+      ? (ai.key_source === 'env' ? '🔑 Using key from server environment' : '🔑 Key saved')
+      : 'No key set yet';
+    const placeholder = keySet ? '•••••••••••••• (leave blank to keep)' : 'sk-ant-...';
+    return `
+      <div class="settings-group">
+        <div class="section-title">✨ AI Insights</div>
+        <div style="font-size:var(--fs-xs);color:var(--text-muted);margin-bottom:var(--space-md)">
+          Optional. Add a Claude API key for a plain-language daily briefing on Today
+          and tailored explanations of your treatment plans. All chemical recommendations
+          and amounts stay rule-based — AI only explains them, never invents doses.
+        </div>
+        <div class="card">
+          <div class="settings-item" style="border:none;background:none;padding:0 0 var(--space-md) 0">
+            <div>
+              <div class="settings-item-label">Enable AI insights</div>
+              <div class="settings-item-value" id="aiStateLabel">${enabled ? 'On' : 'Off'}</div>
+            </div>
+            <label class="schedule-toggle">
+              <input type="checkbox" class="ai-enabled-cb" id="aiEnabledCb" ${enabled ? 'checked' : ''}>
+              <span class="schedule-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Claude API Key</label>
+            <input class="form-input" type="password" id="aiApiKey" placeholder="${placeholder}" autocomplete="off">
+            <div style="font-size:var(--fs-xs);color:var(--text-muted);margin-top:4px" id="aiKeyHint">${keyHint}</div>
+          </div>
+          <div class="form-group" style="margin-bottom:var(--space-md)">
+            <label class="form-label">Model</label>
+            <input class="form-input" id="aiModel" value="${model}">
+          </div>
+          <div style="display:flex;gap:var(--space-sm)">
+            <button class="btn btn-secondary" id="aiTestBtn" style="flex:1">Test connection</button>
+            <button class="btn btn-primary" id="aiSaveBtn" style="flex:1">💾 Save</button>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  _bindAi() {
+    const enabledCb = document.getElementById('aiEnabledCb');
+    const stateLabel = document.getElementById('aiStateLabel');
+    enabledCb?.addEventListener('change', () => {
+      if (stateLabel) stateLabel.textContent = enabledCb.checked ? 'On' : 'Off';
+    });
+
+    document.getElementById('aiTestBtn')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const key = document.getElementById('aiApiKey')?.value?.trim() || null;
+      const model = document.getElementById('aiModel')?.value?.trim() || null;
+      btn.disabled = true;
+      const orig = btn.textContent;
+      btn.textContent = '⏳ Testing...';
+      try {
+        const res = await API.testAiKey({
+          ...(key ? { ai_api_key: key } : {}),
+          ...(model ? { ai_model: model } : {}),
+        });
+        if (res.ok) Toast.success(res.message || 'Connection successful ✅');
+        else Toast.error(res.message || 'Connection failed');
+      } catch (err) {
+        Toast.error('Test failed: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = orig;
+      }
+    });
+
+    document.getElementById('aiSaveBtn')?.addEventListener('click', async () => {
+      const enabled = !!document.getElementById('aiEnabledCb')?.checked;
+      const key = document.getElementById('aiApiKey')?.value ?? '';
+      const model = document.getElementById('aiModel')?.value?.trim() || 'claude-opus-4-8';
+      const keySet = !!(this._aiStatus && this._aiStatus.key_set);
+
+      if (enabled && !keySet && !key.trim()) {
+        Toast.error('Enter a Claude API key first');
+        return;
+      }
+      const payload = { ai_enabled: enabled, ai_model: model };
+      if (key.trim()) payload.ai_api_key = key.trim();
+      try {
+        this._aiStatus = await API.updateAiSettings(payload);
+        const input = document.getElementById('aiApiKey');
+        if (input) {
+          input.value = '';
+          input.placeholder = this._aiStatus.key_set ? '•••••••••••••• (leave blank to keep)' : 'sk-ant-...';
+        }
+        const hint = document.getElementById('aiKeyHint');
+        if (hint) {
+          hint.textContent = this._aiStatus.key_set
+            ? (this._aiStatus.key_source === 'env' ? '🔑 Using key from server environment' : '🔑 Key saved')
+            : 'No key set yet';
+        }
+        Toast.success(enabled ? 'AI insights enabled ✨' : 'AI settings saved');
+      } catch (err) {
+        Toast.error('Failed to save: ' + err.message);
+      }
+    });
   },
 
   renderScheduleRow(s) {
@@ -332,6 +442,9 @@ const SettingsPage = {
 
     // ── Chemical Inventory ────────────────────────────────────────
     this._bindInventory();
+
+    // ── AI Insights ───────────────────────────────────────────────
+    this._bindAi();
   },
 
   _buildInventoryHTML() {

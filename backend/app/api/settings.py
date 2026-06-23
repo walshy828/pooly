@@ -30,8 +30,12 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
     sched_result = await db.execute(select(MaintenanceSchedule).order_by(MaintenanceSchedule.id))
     schedules = sched_result.scalars().all()
 
+    # Never expose the raw AI key; report only whether one is set.
+    pool_dict = {c.key: _serialize_col(pool, c) for c in pool.__table__.columns}
+    pool_dict.pop("ai_api_key", None)
+
     return {
-        "pool": {c.key: _serialize_col(pool, c) for c in pool.__table__.columns},
+        "pool": pool_dict,
         "pool_status": pool.pool_status or "open",
         "pool_opened_at": pool.pool_opened_at.isoformat() if pool.pool_opened_at else None,
         "pool_closed_at": pool.pool_closed_at.isoformat() if pool.pool_closed_at else None,
@@ -58,7 +62,9 @@ async def update_pool_config(data: PoolConfigUpdate, db: AsyncSession = Depends(
 
     await db.commit()
     await db.refresh(pool)
-    return {c.key: getattr(pool, c.key) for c in pool.__table__.columns}
+    out = {c.key: getattr(pool, c.key) for c in pool.__table__.columns}
+    out.pop("ai_api_key", None)
+    return out
 
 
 @router.put("/schedule/{task_type}")

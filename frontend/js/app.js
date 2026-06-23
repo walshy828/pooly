@@ -83,13 +83,16 @@ const App = {
     if (!nav) return;
     nav.innerHTML = `
       <button class="nav-item" data-page="dashboard">
-        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+        <span class="nav-icon">🏠</span><span class="nav-label">Today</span>
       </button>
-      <button class="nav-item" data-page="history">
-        <span class="nav-icon">📋</span><span class="nav-label">Journal</span>
+      <button class="nav-item" data-page="treatment-plan">
+        <span class="nav-icon">🧪</span><span class="nav-label">Plan</span>
       </button>
       <button class="nav-item nav-add" data-page="quick-entry">
         <span class="nav-icon">➕</span><span class="nav-label">Add</span>
+      </button>
+      <button class="nav-item" data-page="history">
+        <span class="nav-icon">📋</span><span class="nav-label">Journal</span>
       </button>
       <button class="nav-item" data-page="settings">
         <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
