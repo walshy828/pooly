@@ -49,9 +49,10 @@ const App = {
     const overlay = document.createElement('div');
     overlay.className = 'pin-overlay';
     overlay.innerHTML = `
-      <div style="font-size:3rem;margin-bottom:var(--space-lg)">🏊</div>
+      <div style="font-size:3.5rem;margin-bottom:16px">🏊</div>
       <div class="pin-title">Pooly</div>
-      <input type="password" class="pin-input" id="pinInput" maxlength="10" placeholder="PIN" inputmode="numeric" autocomplete="off">
+      <p style="font-size:14px;color:rgba(245,245,247,0.45);margin-top:-8px">Enter your PIN to continue</p>
+      <input type="password" class="pin-input" id="pinInput" maxlength="10" placeholder="••••" inputmode="numeric" autocomplete="off">
       <div class="pin-error" id="pinError"></div>`;
     document.body.appendChild(overlay);
 
@@ -84,21 +85,33 @@ const App = {
   renderNav() {
     const nav = document.getElementById('bottomNav');
     if (!nav) return;
+    const SVG = {
+      home: `<svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`,
+      plan: `<svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>`,
+      add:  `<svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+      hist: `<svg viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>`,
+      set:  `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    };
     nav.innerHTML = `
       <button class="nav-item" data-page="dashboard">
-        <span class="nav-icon">🏠</span><span class="nav-label">Today</span>
+        <span class="nav-icon">${SVG.home}</span>
+        <span class="nav-label">Today</span>
       </button>
       <button class="nav-item" data-page="treatment-plan">
-        <span class="nav-icon">🧪</span><span class="nav-label">Plan</span>
+        <span class="nav-icon">${SVG.plan}</span>
+        <span class="nav-label">Plan</span>
       </button>
       <button class="nav-item nav-add" data-page="quick-entry">
-        <span class="nav-icon">➕</span><span class="nav-label">Add</span>
+        <div class="nav-add-ring">${SVG.add.replace('viewBox="0 0 24 24"','viewBox="0 0 24 24" style="width:24px;height:24px;stroke:white;stroke-width:2.5;fill:none"')}</div>
+        <span class="nav-label">Add</span>
       </button>
       <button class="nav-item" data-page="history">
-        <span class="nav-icon">📋</span><span class="nav-label">Journal</span>
+        <span class="nav-icon">${SVG.hist}</span>
+        <span class="nav-label">Journal</span>
       </button>
       <button class="nav-item" data-page="settings">
-        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+        <span class="nav-icon">${SVG.set}</span>
+        <span class="nav-label">Settings</span>
       </button>`;
 
     nav.addEventListener('click', (e) => {

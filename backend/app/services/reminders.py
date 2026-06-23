@@ -13,14 +13,14 @@ from app.models import (
 DEFAULT_SCHEDULES = [
     {"task_type": "test_water", "display_name": "Test Water Chemistry", "interval_days": 3, "priority": "high", "icon": "🔬"},
     {"task_type": "add_chlorine", "display_name": "Add Chlorine", "interval_days": 3, "priority": "high", "icon": "🧪"},
-    {"task_type": "clean_cartridge", "display_name": "Clean Filter Cartridge", "interval_days": 30, "priority": "normal", "icon": "🔧"},
+    {"task_type": "clean_cartridge", "display_name": "Clean Filter Cartridge", "interval_days": 30, "priority": "normal", "icon": "⚙️"},
     {"task_type": "shock_pool", "display_name": "Shock Pool", "interval_days": 14, "priority": "normal", "icon": "⚡"},
     {"task_type": "clean_skimmer", "display_name": "Empty Skimmer", "interval_days": 7, "priority": "normal", "icon": "🗑️"},
-    {"task_type": "robot_run", "display_name": "Run Pool Robot", "interval_days": 7, "priority": "low", "icon": "🤖"},
-    {"task_type": "vacuum", "display_name": "Vacuum Pool", "interval_days": 14, "priority": "low", "icon": "🌊"},
+    {"task_type": "robot_run", "display_name": "Run Robot Vacuum", "interval_days": 7, "priority": "low", "icon": "🌀"},
+    {"task_type": "vacuum", "display_name": "Vacuum Pool", "interval_days": 14, "priority": "low", "icon": "🧹"},
     {"task_type": "empty_basket", "display_name": "Empty Pump Basket", "interval_days": 7, "priority": "normal", "icon": "🗑️"},
     {"task_type": "add_water", "display_name": "Add Water", "interval_days": 7, "priority": "low", "icon": "💧"},
-    {"task_type": "brush_walls", "display_name": "Brush Pool Walls", "interval_days": 7, "priority": "low", "icon": "🖌️"},
+    {"task_type": "brush_walls", "display_name": "Brush Pool Walls", "interval_days": 7, "priority": "low", "icon": "🪥"},
     {"task_type": "check_cya", "display_name": "Check CYA Level", "interval_days": 30, "priority": "normal", "icon": "☀️"},
     {"task_type": "backwash", "display_name": "Backwash / Deep Clean Filter", "interval_days": 30, "priority": "normal", "icon": "♻️"},
 ]

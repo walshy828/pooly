@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <meta name="description" content="Pooly — Smart Pool Maintenance Manager. Track water chemistry, log treatments, and stay on top of pool maintenance.">
-  <meta name="theme-color" content="#0A1628">
+  <meta name="theme-color" content="#070F1C">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Pooly">
@@ -14,19 +14,76 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏊</text></svg>">
 
-  <!-- Design System CSS -->
-  <link rel="stylesheet" href="/css/variables.css">
-  <link rel="stylesheet" href="/css/base.css">
-  <link rel="stylesheet" href="/css/components.css">
-  <link rel="stylesheet" href="/css/dashboard.css">
-  <link rel="stylesheet" href="/css/quick-entry.css">
-  <link rel="stylesheet" href="/css/animations.css">
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            pool: {
+              base:        '#070F1C',
+              surface:     '#0C1A2E',
+              card:        '#0F2040',
+              elevated:    '#162A46',
+              accent:      '#00C8D4',
+              'accent-dim':'rgba(0,200,212,0.15)',
+              blue:        '#0A84FF',
+              text:        '#F5F5F7',
+              muted:       'rgba(245,245,247,0.45)',
+              subtle:      'rgba(245,245,247,0.22)',
+              ai:          '#A99CF5',
+              'ai-bg':     'rgba(169,156,245,0.08)',
+              success:     '#30D158',
+              'success-bg':'rgba(48,209,88,0.12)',
+              warning:     '#FFD60A',
+              'warning-bg':'rgba(255,214,10,0.12)',
+              danger:      '#FF453A',
+              'danger-bg': 'rgba(255,69,58,0.12)',
+              info:        '#0A84FF',
+              'info-bg':   'rgba(10,132,255,0.12)',
+              border:      'rgba(255,255,255,0.08)',
+              'border-md': 'rgba(255,255,255,0.14)',
+            },
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', '"Inter"', 'sans-serif'],
+          },
+          borderRadius: {
+            '2xl': '16px',
+            '3xl': '22px',
+            '4xl': '28px',
+          },
+          backdropBlur: {
+            pool: '20px',
+          },
+          fontSize: {
+            '2xs': ['10px', { lineHeight: '14px' }],
+          },
+          animation: {
+            'fade-in':  'fadeIn 0.3s ease both',
+            'slide-up': 'slideUp 0.38s cubic-bezier(0.34,1.25,0.64,1) both',
+            'spin-slow':'spin 1.2s linear infinite',
+            'shimmer':  'shimmer 1.8s infinite',
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Custom pool-specific styles -->
+  <link rel="stylesheet" href="/css/custom.css">
 </head>
-<body>
+<body class="bg-pool-base text-pool-text font-sans antialiased">
   <div id="app">
     <!-- Page Content Area -->
     <main id="pageContent">
-      <div class="loading-center" style="min-height:80vh">
+      <div class="loading-center">
         <div class="spinner spinner-lg"></div>
       </div>
     </main>
@@ -39,6 +96,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/utils/chemistry.js"></script>
   <script src="/js/utils/formatters.js"></script>
+  <script src="/js/utils/insights.js"></script>
   <script src="/js/components/toast.js"></script>
   <script src="/js/components/edit-modal.js"></script>
   <script src="/js/pages/dashboard.js"></script>

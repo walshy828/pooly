@@ -1,7 +1,9 @@
-/** Dashboard page renderer */
+/** Dashboard page — Apple-inspired bento grid */
 const DashboardPage = {
   trends: null,
   _trendDays: 30,
+  aiStatus: null,
+  activePlan: null,
 
   // ── Lifecycle ─────────────────────────────────────────────────
   async render(container) {
@@ -24,47 +26,117 @@ const DashboardPage = {
       if (aiStatus && aiStatus.enabled) this.loadBriefing();
     } catch (err) {
       container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">🏊</div>
-          <div class="empty-text">Welcome to Pooly!<br>Add your first entry to get started.</div>
+        <div class="flex flex-col items-center justify-center min-h-[70vh] gap-4 px-6 text-center">
+          <div style="font-size:3rem">🏊</div>
+          <div class="text-xl font-bold text-pool-text">Welcome to Pooly!</div>
+          <div class="text-sm text-pool-muted">Add your first entry to get started.</div>
+          <button class="btn btn-primary mt-2" onclick="App.navigate('quick-entry')">Log First Entry</button>
         </div>`;
     }
   },
 
+  _escape(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+
+  // ── Main Layout ───────────────────────────────────────────────
   buildHTML(d) {
+    const insights = Insights.compute(d, this.activePlan);
     return `
-      <div class="dashboard container">
+      <div class="px-4 pt-5 pb-2 max-w-[480px] mx-auto">
         ${d.pool_status === 'closed' ? this.renderClosedBanner(d) : ''}
-        ${this.renderAiBriefing()}
-        ${this.renderStatusHero(d)}
-        ${this.renderActionCenter(d)}
-        ${this.renderPlanStrip()}
-        ${this.renderChemistryPanel(d)}
-        ${this.renderTrends()}
-        ${this.renderWeatherInsights(d)}
-        ${this.renderReminders(d)}
-        ${this.renderRecent(d)}
+
+        <div class="grid grid-cols-2 gap-3">
+
+          <!-- AI / Daily Brief — full width -->
+          <div class="col-span-2 animate-slide-up stagger-1">
+            ${this.renderBriefCard(d, insights)}
+          </div>
+
+          <!-- Health Score + Last Tested — 2-up -->
+          <div class="animate-slide-up stagger-2">${this.renderHealthCard(d)}</div>
+          <div class="animate-slide-up stagger-2">${this.renderLastTestedCard(d)}</div>
+
+          <!-- Chemistry Cards — 3-up -->
+          <div class="col-span-2 animate-slide-up stagger-3">
+            ${this.renderChemCards(d)}
+          </div>
+
+          <!-- What's Next — full width -->
+          <div class="col-span-2 animate-slide-up stagger-4">
+            ${this.renderWhatsNext(insights)}
+          </div>
+
+          <!-- Weather + Maintenance — 2-up -->
+          ${this._hasWeather(d) ? `<div class="col-span-2 animate-slide-up stagger-5">${this.renderWeatherCard(d)}</div>` : ''}
+
+          <!-- Reminders — full width -->
+          ${d.reminders && d.reminders.length > 0 ? `
+          <div class="col-span-2 animate-slide-up stagger-5">
+            ${this.renderReminders(d)}
+          </div>` : ''}
+
+          <!-- Trends — full width -->
+          ${this.trends && Object.keys(this.trends).length > 0 ? `
+          <div class="col-span-2 animate-slide-up stagger-6">
+            ${this.renderTrends()}
+          </div>` : ''}
+
+          <!-- Active Plan — full width -->
+          <div class="col-span-2 animate-slide-up stagger-7">
+            ${this.renderPlanCard()}
+          </div>
+
+          <!-- Recent Activity — full width -->
+          ${d.recent_entries && d.recent_entries.length > 0 ? `
+          <div class="col-span-2 animate-slide-up stagger-8">
+            ${this.renderRecent(d)}
+          </div>` : ''}
+
+        </div>
       </div>`;
   },
 
-  // ── AI Briefing (optional) ────────────────────────────────────
-  _escape(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
+  // ── Pool Closed Banner ────────────────────────────────────────
+  renderClosedBanner(d) {
+    const closedDate = d.pool_closed_at ? Fmt.date(d.pool_closed_at) : 'recently';
+    return `
+      <div class="pool-closed-banner mb-4 animate-fade-in">
+        <div style="font-size:1.6rem">❄️</div>
+        <div>
+          <div class="font-semibold text-[15px] text-pool-text">Pool is Closed</div>
+          <div class="text-[12px] text-pool-muted mt-0.5">Winterized ${closedDate} · Care reminders paused</div>
+        </div>
+        <button class="ml-auto btn btn-sm btn-secondary" onclick="App.navigate('settings')">Settings</button>
+      </div>`;
   },
 
-  renderAiBriefing() {
-    if (!this.aiStatus || !this.aiStatus.enabled) return '';
+  // ── Daily Brief Card ──────────────────────────────────────────
+  renderBriefCard(d, insights) {
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    const showAI = this.aiStatus && this.aiStatus.enabled;
+    const fallbackBrief = this._escape(Insights.generateBrief(d, insights));
     return `
-      <div class="ai-briefing card slide-up" id="aiBriefingCard">
-        <div class="ai-briefing-head">
-          <span class="ai-badge">✨ AI Insights</span>
-          <button class="ai-regen-btn" id="aiRegenBtn" title="Regenerate">↻</button>
+      <div class="bento-card" style="border-left: 3px solid rgba(169,156,245,0.5)" id="aiBriefingCard">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="bento-label" style="color:rgba(169,156,245,0.7)">✦ Daily Brief</div>
+            <div class="text-[11px] text-pool-muted">${today}</div>
+          </div>
+          ${showAI ? `<button id="aiRegenBtn" title="Regenerate" class="w-8 h-8 rounded-full flex items-center justify-center text-pool-muted hover:text-pool-ai transition-colors" style="background:rgba(169,156,245,0.08);border:1px solid rgba(169,156,245,0.15)">
+            <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round">
+              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.93"/>
+            </svg>
+          </button>` : ''}
         </div>
-        <div class="ai-briefing-body" id="aiBriefingBody">
-          <div class="ai-skeleton"><span></span><span></span><span></span></div>
+        <div id="aiBriefingBody">
+          ${showAI
+            ? `<div class="ai-skeleton"><span></span><span></span><span></span></div>`
+            : `<p class="text-[14px] leading-relaxed" style="color:rgba(245,245,247,0.75)">${fallbackBrief}</p>`
+          }
         </div>
+        ${showAI ? `<div class="text-[10px] mt-3" style="color:rgba(169,156,245,0.45)">Powered by AI · Tap ↺ to refresh</div>` : ''}
       </div>`;
   },
 
@@ -74,469 +146,257 @@ const DashboardPage = {
 
   async loadBriefing() {
     const body = document.getElementById('aiBriefingBody');
-    const btn = document.getElementById('aiRegenBtn');
+    const btn  = document.getElementById('aiRegenBtn');
     if (!body) return;
     body.innerHTML = `<div class="ai-skeleton"><span></span><span></span><span></span></div>`;
-    btn?.classList.add('ai-spinning');
+    btn?.classList.add('animate-spin');
     try {
       const res = await API.getAiInsights();
-      body.innerHTML = `<p class="ai-briefing-text">${this._escape(res.briefing)}</p>`;
-    } catch (err) {
-      body.innerHTML = `<p class="ai-briefing-error">Couldn't generate insights right now. <button class="ai-retry-link" id="aiRetry">Try again</button></p>`;
+      body.innerHTML = `<p class="text-[14px] leading-relaxed animate-fade-in" style="color:rgba(245,245,247,0.8)">${this._escape(res.briefing)}</p>`;
+    } catch {
+      body.innerHTML = `<p class="text-[13px] text-pool-muted">Couldn't generate insights. <button class="text-pool-ai underline" id="aiRetry">Try again</button></p>`;
       document.getElementById('aiRetry')?.addEventListener('click', () => this.loadBriefing());
     } finally {
-      btn?.classList.remove('ai-spinning');
+      btn?.classList.remove('animate-spin');
     }
   },
 
-  // ── Active Treatment Plan strip ───────────────────────────────
-  renderPlanStrip() {
-    const plan = this.activePlan;
-    if (!plan) {
-      return `
-        <div class="plan-strip plan-strip-empty" onclick="App.navigate('treatment-plan')">
-          <div class="plan-strip-icon">🧪</div>
-          <div class="plan-strip-main">
-            <div class="plan-strip-title">No active treatment plan</div>
-            <div class="plan-strip-sub">Build a step-by-step plan to get your water dialed in.</div>
+  // ── Health Score Card ─────────────────────────────────────────
+  renderHealthCard(d) {
+    const score  = d.health_score;
+    const label  = score ? (Chemistry.healthLabels[score] || '') : 'No observations';
+    const color  = score ? this._healthColor(score) : 'rgba(245,245,247,0.2)';
+    const age    = d.health_observed_at ? Fmt.timeAgo(d.health_observed_at) : null;
+
+    // SVG ring — 220 circumference, 35 radius
+    const R   = 35;
+    const C   = 2 * Math.PI * R;
+    const pct = score ? score / 10 : 0;
+    const offset = C - pct * C;
+
+    return `
+      <div class="bento-card bento-card-sm h-full cursor-pointer" onclick="App.navigate('quick-entry',{tab:'care'})">
+        <div class="bento-label">Health</div>
+        <div class="flex items-center gap-3">
+          <div style="position:relative;width:72px;height:72px;flex-shrink:0">
+            <svg viewBox="0 0 80 80" style="width:72px;height:72px;transform:rotate(-90deg)">
+              <circle class="health-ring-track" cx="40" cy="40" r="${R}" stroke-width="5"/>
+              <circle class="health-ring-fill" cx="40" cy="40" r="${R}" stroke-width="5"
+                stroke="${color}"
+                stroke-dasharray="${C.toFixed(1)}"
+                stroke-dashoffset="${offset.toFixed(1)}"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+              <span style="font-size:20px;font-weight:800;color:${color}">${score || '—'}</span>
+            </div>
           </div>
-          <span class="plan-strip-arrow">›</span>
-        </div>`;
-    }
-    const total = plan.steps_total || 0;
-    const done = plan.steps_completed || 0;
-    const pct = total ? Math.round((done / total) * 100) : 0;
-    return `
-      <div class="plan-strip" onclick="App.navigate('treatment-plan')">
-        <div class="plan-strip-icon">🧪</div>
-        <div class="plan-strip-main">
-          <div class="plan-strip-title">${this._escape(plan.condition_label)}</div>
-          <div class="plan-strip-sub">${done} of ${total} steps complete</div>
-          <div class="plan-strip-bar"><div class="plan-strip-fill" style="width:${pct}%"></div></div>
-        </div>
-        <span class="plan-strip-arrow">Resume ›</span>
-      </div>`;
-  },
-
-  // ── Pool Closed Banner ────────────────────────────────────────
-  renderClosedBanner(d) {
-    const closedDate = d.pool_closed_at ? Fmt.date(d.pool_closed_at) : 'recently';
-    return `
-      <div class="pool-closed-banner animate-in">
-        <div class="banner-icon">❄️</div>
-        <div class="banner-content">
-          <div class="banner-title">Pool is Closed</div>
-          <div class="banner-desc">Winterized on ${closedDate}. Pool Care reminders are paused.</div>
+          <div style="min-width:0">
+            <div class="text-[15px] font-semibold text-pool-text leading-tight">${label}</div>
+            ${age ? `<div class="text-[11px] text-pool-muted mt-1">${age}</div>` : ''}
+            <div class="text-[11px] mt-2" style="color:rgba(0,200,212,0.7)">Tap to update →</div>
+          </div>
         </div>
       </div>`;
   },
 
-  // ── Status Hero ───────────────────────────────────────────────
-  renderStatusHero(d) {
-    const score = d.health_score;
-    const pct = score ? score * 10 : 0;
-    const label = d.health_label || 'No observations yet';
-    const age = d.health_observed_at ? Fmt.timeAgo(d.health_observed_at) : null;
+  // ── Last Tested Card ──────────────────────────────────────────
+  renderLastTestedCard(d) {
+    const hoursOld = d.chemistry_age_hours;
+    const daysOld  = hoursOld != null ? Math.floor(hoursOld / 24) : null;
+    const urgency  = hoursOld == null ? 'critical'
+      : hoursOld < 24  ? 'good'
+      : hoursOld < 72  ? 'info'
+      : hoursOld < 168 ? 'warning' : 'critical';
+    const urgencyColor = {
+      good: '#30D158', info: '#00C8D4', warning: '#FFD60A', critical: '#FF453A',
+    }[urgency];
 
-    const testAge = d.chemistry_age_hours;
-    const testText = testAge == null ? 'Never tested'
-      : testAge < 1 ? 'Just tested'
-      : testAge < 24 ? `Tested ${Math.round(testAge)}h ago`
-      : `Tested ${Math.round(testAge / 24)}d ago`;
-    const testState = testAge == null ? 'stale'
-      : testAge < 24 ? 'fresh'
-      : testAge < 72 ? 'aging' : 'stale';
+    const bigNum = daysOld == null ? '—'
+      : daysOld === 0 ? '0d'
+      : `${daysOld}d`;
+    const subText = daysOld == null ? 'Never tested'
+      : daysOld === 0 ? 'Tested today'
+      : `ago`;
 
-    const scoreColor = !score ? 'var(--text-muted)'
-      : score >= 8 ? 'var(--color-success)'
-      : score >= 6 ? 'var(--color-warning)' : 'var(--color-danger)';
-
-    const s = d.sensors || {};
-    const chips = [];
-    if (s.pool_temp_f != null) {
-      chips.push(`<span class="hero-chip">🌡️ ${Fmt.temp(s.pool_temp_f)}</span>`);
-    }
-    if (s.pump_state != null) {
-      const on = s.pump_state === 'on';
-      chips.push(`<span class="hero-chip" style="color:${on ? 'var(--color-success)' : 'var(--text-muted)'}">⚙️ Pump ${on ? 'ON' : 'OFF'}</span>`);
-    }
-    if (d.weather?.air_temp_f != null) {
-      chips.push(`<span class="hero-chip">🌤️ ${Math.round(d.weather.air_temp_f)}°F outside</span>`);
-    }
-    if (d.weather?.uv_index != null) {
-      const uv = Math.round(d.weather.uv_index);
-      const uvLabel = uv >= 8 ? 'Very High' : uv >= 6 ? 'High' : uv >= 3 ? 'Moderate' : 'Low';
-      chips.push(`<span class="hero-chip hero-chip-uv-${uv >= 8 ? 'danger' : uv >= 6 ? 'warn' : 'ok'}">☀️ UV ${uv} — ${uvLabel}</span>`);
-    }
-
-    return `
-      <div class="status-hero slide-up">
-        <div class="status-hero-top">
-          <div class="hero-score-block">
-            <div class="hero-score" style="color:${scoreColor}">
-              ${score ? `${score}<span class="hero-score-denom">/10</span>` : '—'}
-            </div>
-            <div class="hero-label">${label}</div>
-            ${age ? `<div class="hero-age">${age}</div>` : ''}
-          </div>
-          <div class="hero-test-badge hero-test-${testState}">🧪 ${testText}</div>
-        </div>
-        ${score ? `<div class="health-bar" style="margin-top:var(--space-md)"><div class="health-bar-fill" style="width:${pct}%"></div></div>` : ''}
-        ${chips.length ? `<div class="hero-chips">${chips.join('')}</div>` : ''}
-      </div>`;
-  },
-
-  // ── Action Center ─────────────────────────────────────────────
-  renderActionCenter(d) {
-    const actions = [];
-
-    // Chemistry recommendations with dosage guidance
-    (d.recommendations || []).forEach(r => {
-      actions.push({
-        severity: r.severity,
-        sort: r.severity === 'critical' ? 0 : r.severity === 'warning' ? 1 : 2,
-        icon: r.icon,
-        title: r.category,
-        body: r.message,
-        consequences: r.consequences || [],
-        impact_tags: r.impact_tags || [],
-        impact_score: r.impact_score || 1,
-      });
-    });
-
-    // Urgent/overdue maintenance reminders
-    (d.reminders || [])
-      .filter(r => r.urgency === 'urgent' || r.urgency === 'overdue')
-      .forEach(r => {
-        actions.push({
-          severity: r.urgency === 'urgent' ? 'critical' : 'warning',
-          sort: r.urgency === 'urgent' ? 0 : 1,
-          icon: r.icon,
-          title: r.display_name,
-          body: r.days_since != null
-            ? `Last done ${r.days_since} days ago — recommended every ${r.interval_days} days.`
-            : `Never done — recommended every ${r.interval_days} days.`,
-        });
-      });
-
-    if (actions.length === 0) {
-      return `
-        <div class="action-center animate-in">
-          <div class="all-good-banner">
-            <div class="all-good-icon">✅</div>
-            <div class="all-good-content">
-              <div class="all-good-title">Pool looks great!</div>
-              <div class="all-good-sub">No chemistry corrections or urgent tasks needed right now.</div>
-            </div>
-          </div>
-          <button class="tp-dashboard-btn tp-dashboard-btn-subtle" onclick="App.navigate('treatment-plan')">
-            🧪 View Treatment Plan
-          </button>
-        </div>`;
-    }
-
-    actions.sort((a, b) => a.sort - b.sort);
-
-    const critCount = actions.filter(a => a.severity === 'critical').length;
-    const warnCount = actions.filter(a => a.severity === 'warning').length;
-    const infCount  = actions.filter(a => a.severity === 'info').length;
-    const chips = [
-      critCount ? `<span class="ac-chip ac-chip-critical">${critCount} Critical</span>` : '',
-      warnCount ? `<span class="ac-chip ac-chip-warning">${warnCount} Warning</span>` : '',
-      infCount  ? `<span class="ac-chip ac-chip-info">${infCount} Info</span>` : '',
-    ].filter(Boolean).join('');
-
-    const TAG_META = {
-      health:    { icon: '⚕️', label: 'Health risk' },
-      cost:      { icon: '💸', label: 'Higher cost' },
-      equipment: { icon: '🔧', label: 'Equipment damage' },
-      water:     { icon: '🌊', label: 'Water quality' },
-    };
-
-    const items = actions.map(a => {
-      const hasConsequences = a.consequences && a.consequences.length > 0;
-      let consequenceHtml = '';
-      if (hasConsequences) {
-        const dots = [1, 2, 3].map(n =>
-          `<span class="impact-dot${n <= a.impact_score ? ' filled' : ''}"></span>`
-        ).join('');
-        const impactLabel = a.impact_score >= 3 ? 'High' : a.impact_score === 2 ? 'Medium' : 'Low';
-        const tagHtml = (a.impact_tags || []).map(t => {
-          const m = TAG_META[t] || { icon: '', label: t };
-          return `<span class="impact-tag">${m.icon} ${m.label}</span>`;
-        }).join('');
-        const bulletHtml = a.consequences.map(c =>
-          `<li>${c}</li>`
-        ).join('');
-        consequenceHtml = `
-          <div class="consequence-strip">
-            <div class="consequence-header">
-              <span class="consequence-label">If you skip this:</span>
-              <span class="impact-meter">${dots}<span class="impact-meter-label">${impactLabel} impact</span></span>
-            </div>
-            <ul class="consequence-list">${bulletHtml}</ul>
-            ${tagHtml ? `<div class="impact-tags">${tagHtml}</div>` : ''}
-          </div>`;
-      }
-      return `
-        <div class="action-item action-${a.severity}">
-          <div class="action-item-header">
-            <span class="action-item-icon">${a.icon}</span>
-            <span class="action-item-title">${a.title}</span>
-          </div>
-          <div class="action-item-body">${a.body}</div>
-          ${consequenceHtml}
-        </div>`;
+    // 2 most recent param pills
+    const pills = (d.chemistry || []).slice(0, 2).map(c => {
+      const pLabel = { ph: 'pH', free_chlorine: 'Cl', alkalinity: 'Alk', cyanuric_acid: 'CYA', calcium_hardness: 'Ca', bromine: 'Br' }[c.parameter] || c.parameter;
+      const pColor = c.status === 'ideal' ? '#30D158' : c.status === 'low' ? '#FFD60A' : '#FF453A';
+      return `<span style="background:rgba(255,255,255,0.05);border-radius:6px;padding:2px 7px;font-size:10px;color:${pColor}">${pLabel} ${c.value ?? '—'}</span>`;
     }).join('');
 
     return `
-      <div class="action-center animate-in">
-        <div class="section-title" style="display:flex;align-items:center;gap:var(--space-sm);margin-bottom:var(--space-md)">
-          Actions Needed
-          <div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div>
+      <div class="bento-card bento-card-sm h-full cursor-pointer" onclick="App.navigate('quick-entry',{tab:'test'})">
+        <div class="bento-label">Last Tested</div>
+        <div class="flex items-baseline gap-1.5">
+          <span style="font-size:38px;font-weight:800;line-height:1;color:${urgencyColor}">${bigNum}</span>
+          <span class="text-[13px] text-pool-muted">${subText}</span>
         </div>
-        <div class="action-list">${items}</div>
-        <button class="tp-dashboard-btn" onclick="App.navigate('treatment-plan')">
-          🧪 Build Step-by-Step Treatment Plan
-        </button>
+        ${pills ? `<div class="flex gap-1 flex-wrap mt-2">${pills}</div>` : ''}
+        <div class="text-[11px] mt-3" style="color:rgba(0,200,212,0.7)">Test Now →</div>
       </div>`;
   },
 
-  // ── Chemistry Panel ───────────────────────────────────────────
-  renderChemistryPanel(d) {
-    const RANGES = {
-      ph:               { min: 6.2, max: 8.4, idealLow: 7.2,  idealHigh: 7.6,  unit: '' },
-      free_chlorine:    { min: 0,   max: 10,  idealLow: 1.0,  idealHigh: 4.0,  unit: 'ppm' },
-      total_chlorine:   { min: 0,   max: 10,  idealLow: 1.0,  idealHigh: 4.0,  unit: 'ppm' },
-      alkalinity:       { min: 0,   max: 240, idealLow: 80,   idealHigh: 120,  unit: 'ppm' },
-      cyanuric_acid:    { min: 0,   max: 240, idealLow: 30,   idealHigh: 50,   unit: 'ppm' },
-      calcium_hardness: { min: 0,   max: 800, idealLow: 200,  idealHigh: 400,  unit: 'ppm' },
-      bromine:          { min: 0,   max: 10,  idealLow: 2.0,  idealHigh: 6.0,  unit: 'ppm' },
-    };
-    const LABELS = {
-      ph: 'pH', free_chlorine: 'Free Chlorine', total_chlorine: 'Total Chlorine',
-      alkalinity: 'Alkalinity', cyanuric_acid: 'Stabilizer (CYA)',
-      calcium_hardness: 'Calcium Hardness', bromine: 'Bromine',
-    };
-
+  // ── Chemistry Mini Cards ──────────────────────────────────────
+  renderChemCards(d) {
     if (!d.chemistry || d.chemistry.length === 0) {
       return `
-        <div class="chemistry-panel">
-          <div class="section-title">Water Chemistry</div>
-          <div class="card" style="text-align:center;color:var(--text-muted);padding:var(--space-2xl)">
-            No measurements yet. Tap + to add your first test.
-          </div>
+        <div class="bento-card flex flex-col items-center justify-center py-6 text-center cursor-pointer" onclick="App.navigate('quick-entry',{tab:'test'})">
+          <div style="font-size:1.8rem;margin-bottom:8px">🧪</div>
+          <div class="text-[14px] font-medium text-pool-text">No water test yet</div>
+          <div class="text-[12px] text-pool-muted mt-1">Tap to add your first test</div>
         </div>`;
     }
 
-    const testAge = d.chemistry_age_hours;
-    const ageText = testAge == null ? null
-      : testAge < 1 ? 'Just tested'
-      : testAge < 24 ? `${Math.round(testAge)}h ago`
-      : `${Math.round(testAge / 24)}d ago`;
-    const ageState = testAge == null ? 'stale' : testAge < 24 ? 'fresh' : testAge < 72 ? 'aging' : 'stale';
+    const LABELS  = { ph:'pH', free_chlorine:'Free Cl', total_chlorine:'Total Cl', alkalinity:'Alkalinity', cyanuric_acid:'CYA', calcium_hardness:'Hardness', bromine:'Bromine' };
+    const RANGES  = {
+      ph:               { min:6.2, max:8.4, idealLow:7.2,  idealHigh:7.6  },
+      free_chlorine:    { min:0,   max:10,  idealLow:1.0,  idealHigh:4.0  },
+      total_chlorine:   { min:0,   max:10,  idealLow:1.0,  idealHigh:4.0  },
+      alkalinity:       { min:0,   max:240, idealLow:80,   idealHigh:120  },
+      cyanuric_acid:    { min:0,   max:240, idealLow:30,   idealHigh:50   },
+      calcium_hardness: { min:0,   max:800, idealLow:200,  idealHigh:400  },
+      bromine:          { min:0,   max:10,  idealLow:2.0,  idealHigh:6.0  },
+    };
 
-    const rows = d.chemistry.filter(c => c.value != null).map(c => {
-      const r = RANGES[c.parameter];
-      const label = LABELS[c.parameter] || c.parameter;
-      const trend = this._getTrendDir(c.parameter);
-      const trendHtml = !trend ? ''
-        : `<span class="trend-dir trend-${trend}">${trend === 'up' ? '↗' : trend === 'down' ? '↘' : '→'}</span>`;
+    // Show top 3 params: pH, free chlorine, alkalinity (or whatever is available)
+    const PRIORITY = ['ph', 'free_chlorine', 'alkalinity', 'total_chlorine', 'cyanuric_acid', 'calcium_hardness', 'bromine'];
+    const params   = PRIORITY.map(p => d.chemistry.find(c => c.parameter === p)).filter(Boolean).slice(0, 3);
+    if (params.length === 0) return '';
 
-      const statusText = c.status === 'ideal' ? '✓' : c.status === 'low' ? '↑ Low' : '↓ High';
+    const cards = params.map(c => {
+      const label    = LABELS[c.parameter] || c.parameter;
+      const spec     = RANGES[c.parameter];
+      const statusCls= c.status === 'ideal' ? 'status-ideal' : c.status === 'low' ? 'status-low' : 'status-high';
+      const statusLbl= c.status === 'ideal' ? 'Ideal' : c.status === 'low' ? 'Low' : 'High';
+      const trend    = this._getTrendDir(c.parameter);
+      const trendSym = trend === 'up' ? '↗' : trend === 'down' ? '↘' : '';
 
       let rangeBar = '';
-      if (r) {
-        const pct = v => Math.max(0, Math.min(100, (v - r.min) / (r.max - r.min) * 100));
-        const iLeft   = pct(r.idealLow).toFixed(1);
-        const iWidth  = (pct(r.idealHigh) - pct(r.idealLow)).toFixed(1);
-        const vPct    = pct(c.value).toFixed(1);
-        const unitStr = r.unit ? ` ${r.unit}` : '';
+      if (spec && c.value != null) {
+        const pct  = v => Math.max(0, Math.min(100, (v - spec.min) / (spec.max - spec.min) * 100));
+        const iLeft  = pct(spec.idealLow).toFixed(1);
+        const iWidth = (pct(spec.idealHigh) - pct(spec.idealLow)).toFixed(1);
+        const vPct   = pct(c.value).toFixed(1);
         rangeBar = `
-          <div class="chem-range-row">
-            <div class="param-range-bar">
-              <div class="param-range-track"></div>
-              <div class="param-range-ideal" style="left:${iLeft}%;width:${iWidth}%"></div>
-              <div class="param-range-marker" style="left:${vPct}%;background:${c.color}"></div>
-            </div>
-            <span class="param-ideal-label">Ideal ${r.idealLow}–${r.idealHigh}${unitStr}</span>
+          <div class="chem-range-bar mt-2">
+            <div class="chem-range-ideal" style="left:${iLeft}%;width:${iWidth}%"></div>
+            <div class="chem-range-marker" style="left:${vPct}%;background:${c.color || '#00C8D4'}"></div>
           </div>`;
       }
 
       return `
-        <div class="chem-row chem-row-${c.status}">
-          <div class="chem-row-top">
-            <span class="chem-row-name">${label}</span>
-            <div class="chem-row-right">
-              <span class="chem-row-val" style="color:${c.color}">${c.value}${c.unit ? `<span class="chem-unit"> ${c.unit}</span>` : ''}</span>
-              ${trendHtml}
-              <span class="chem-status-pill chem-pill-${c.status}">${statusText}</span>
-            </div>
+        <div class="bento-card bento-card-sm cursor-pointer" onclick="App.navigate('quick-entry',{tab:'test'})">
+          <div class="bento-label">${label}</div>
+          <div class="flex items-baseline gap-1">
+            <span style="font-size:26px;font-weight:800;line-height:1;color:${c.color || '#F5F5F7'}">${c.value ?? '—'}</span>
+            ${c.unit ? `<span class="text-[11px] text-pool-muted">${c.unit}</span>` : ''}
+            ${trendSym ? `<span class="text-[12px] text-pool-muted ml-auto">${trendSym}</span>` : ''}
           </div>
+          <div class="mt-2"><span class="status-pill ${statusCls}">${statusLbl}</span></div>
           ${rangeBar}
         </div>`;
     }).join('');
 
-    return `
-      <div class="chemistry-panel">
-        <div class="section-title">
-          Water Chemistry
-          ${ageText ? `<span class="section-meta chem-age-${ageState}"> · ${ageText}</span>` : ''}
-        </div>
-        <div class="chem-rows-list card">${rows}</div>
-      </div>`;
+    return `<div class="grid grid-cols-3 gap-3">${cards}</div>`;
   },
 
-  // ── Trends ────────────────────────────────────────────────────
-  renderTrends() {
-    if (!this.trends || Object.keys(this.trends).length === 0) return '';
-    return `
-      <div class="trends-section">
-        <div class="trends-header">
-          <div class="section-title" style="margin:0">Trends</div>
-          <div class="trend-toggle-group">
-            <button class="trend-toggle-btn${this._trendDays === 7  ? ' active' : ''}" data-days="7">7d</button>
-            <button class="trend-toggle-btn${this._trendDays === 14 ? ' active' : ''}" data-days="14">14d</button>
-            <button class="trend-toggle-btn${this._trendDays === 30 ? ' active' : ''}" data-days="30">30d</button>
+  // ── What's Next Card ──────────────────────────────────────────
+  renderWhatsNext(insights) {
+    if (insights.length === 0) {
+      return `
+        <div class="bento-card">
+          <div class="bento-label">💡 What's Next</div>
+          <div class="flex items-center gap-3 py-2">
+            <div style="font-size:1.6rem">🌊</div>
+            <div>
+              <div class="text-[15px] font-semibold text-pool-text">Everything looks great!</div>
+              <div class="text-[12px] text-pool-muted mt-0.5">No urgent tasks — keep up the great work.</div>
+            </div>
           </div>
-        </div>
-        <div id="trendCharts">${this._renderTrendCharts(this._trendDays)}</div>
-      </div>`;
-  },
-
-  _renderTrendCharts(days) {
-    const paramConfig = {
-      total_chlorine:   { label: 'Total Chlorine', color: '#D46B94', unit: 'ppm' },
-      free_chlorine:    { label: 'Free Chlorine',  color: '#E8A0B4', unit: 'ppm' },
-      ph:               { label: 'pH',             color: '#5B9B3E', unit: '' },
-      alkalinity:       { label: 'Alkalinity',     color: '#3B8C4A', unit: 'ppm' },
-      cyanuric_acid:    { label: 'CYA',            color: '#C87098', unit: 'ppm' },
-      bromine:          { label: 'Bromine',        color: '#B83878', unit: 'ppm' },
-      calcium_hardness: { label: 'Hardness',       color: '#5858C0', unit: 'ppm' },
-    };
-
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-
-    let charts = '';
-    for (const [param, allPoints] of Object.entries(this.trends)) {
-      const points = allPoints.filter(p => !p.date || new Date(p.date) >= cutoff);
-      if (points.length < 2) continue;
-      const cfg = paramConfig[param] || { label: param, color: '#20B2AA', unit: '' };
-      const spec = Chemistry.ranges[param];
-      const latestVal = points[points.length - 1].value;
-      const trendDir = this._getTrendDir(param);
-      const trendHtml = !trendDir ? ''
-        : ` <span class="trend-dir trend-${trendDir}">${trendDir === 'up' ? '↗' : trendDir === 'down' ? '↘' : '→'}</span>`;
-
-      charts += `
-        <div class="trend-card">
-          <div class="trend-header">
-            <span class="trend-title">${cfg.label}</span>
-            <span class="trend-value" style="color:${cfg.color}">${latestVal}${cfg.unit ? ' ' + cfg.unit : ''}${trendHtml}</span>
-          </div>
-          <div class="trend-chart">${this.renderSparkline(points, cfg.color, spec)}</div>
         </div>`;
     }
 
-    return charts || `<div style="text-align:center;color:var(--text-muted);padding:var(--space-xl);font-size:var(--fs-sm)">Not enough data for this range.</div>`;
-  },
+    const ACTION_NAV = {
+      test:    () => `App.navigate('quick-entry',{tab:'test'})`,
+      chemical:() => `App.navigate('quick-entry',{tab:'chem'})`,
+      care:    () => `App.navigate('quick-entry',{tab:'care'})`,
+      observe: () => `App.navigate('quick-entry',{tab:'care'})`,
+      plan:    () => `App.navigate('treatment-plan')`,
+    };
 
-  bindTrendToggle() {
-    document.querySelectorAll('.trend-toggle-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const days = parseInt(btn.dataset.days);
-        this._trendDays = days;
-        document.querySelectorAll('.trend-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
-        const container = document.getElementById('trendCharts');
-        if (container) container.innerHTML = this._renderTrendCharts(days);
-      });
-    });
-  },
-
-  _getTrendDir(param) {
-    const pts = this.trends?.[param];
-    if (!pts || pts.length < 4) return null;
-    const slice = pts.slice(-6);
-    const first = slice[0].value, last = slice[slice.length - 1].value;
-    const diff = last - first;
-    const threshold = {
-      ph: 0.15, free_chlorine: 0.5, total_chlorine: 0.5,
-      alkalinity: 8, cyanuric_acid: 5, calcium_hardness: 20, bromine: 0.5,
-    }[param] ?? (Math.abs(first) * 0.08 || 0.5);
-    if (diff > threshold) return 'up';
-    if (diff < -threshold) return 'down';
-    return 'stable';
-  },
-
-  // ── Weather Insights ──────────────────────────────────────────
-  renderWeatherInsights(d) {
-    if (!d.weather || d.weather.air_temp_f == null) return '';
-    const w = d.weather;
-
-    const tempF = Math.round(w.air_temp_f);
-    const uv = w.uv_index != null ? Math.round(w.uv_index) : null;
-    const uvLabel = uv == null ? null
-      : uv >= 11 ? 'Extreme' : uv >= 8 ? 'Very High' : uv >= 6 ? 'High' : uv >= 3 ? 'Moderate' : 'Low';
-    const uvState = uv != null && uv >= 8 ? 'danger' : uv != null && uv >= 6 ? 'warn' : 'ok';
-
-    const insights = [];
-    if (uv != null && uv >= 6) {
-      insights.push({ icon: '☀️', level: uv >= 8 ? 'warning' : 'info',
-        text: `UV is ${uvLabel} (${uv}) — chlorine degrades ${uv >= 8 ? '2–3×' : '~1.5×'} faster in direct sun. Consider testing Free Chlorine today.` });
-    }
-    if (tempF >= 85) {
-      insights.push({ icon: '🌡️', level: 'warning',
-        text: `Hot weather (${tempF}°F) accelerates algae growth and raises chlorine demand. Test more frequently during heat waves.` });
-    }
-    if (w.humidity != null && w.humidity < 30) {
-      insights.push({ icon: '💧', level: 'info',
-        text: `Low humidity (${Math.round(w.humidity)}%) increases evaporation. Monitor water level and chemical concentration.` });
-    }
-    if (w.wind_speed != null && w.wind_speed > 15) {
-      insights.push({ icon: '🌬️', level: 'info',
-        text: `Gusty winds at ${Math.round(w.wind_speed)} mph — debris may enter the pool. Check the skimmer basket.` });
-    }
-    // Backend-generated impacts — skip if a topic is already covered above
-    const coveredTopics = [];
-    if (uv != null && uv >= 6) coveredTopics.push('uv', 'ultraviolet', 'chlorine degrad');
-    if (tempF >= 85) coveredTopics.push('hot', 'heat', 'algae', 'temperature');
-    if (w.humidity != null && w.humidity < 30) coveredTopics.push('humidity', 'evaporation');
-    if (w.wind_speed != null && w.wind_speed > 15) coveredTopics.push('wind', 'debris', 'skimmer');
-    (w.pool_impact || []).forEach(msg => {
-      const lower = msg.toLowerCase();
-      if (!coveredTopics.some(t => lower.includes(t))) {
-        insights.push({ icon: '💡', level: 'info', text: msg });
-      }
-    });
-
-    const statItems = [
-      `<div class="w-stat"><span class="w-stat-val">${tempF}°F</span><span class="w-stat-lbl">${w.condition || 'Air'}</span></div>`,
-      w.humidity != null ? `<div class="w-stat"><span class="w-stat-val">${Math.round(w.humidity)}%</span><span class="w-stat-lbl">Humidity</span></div>` : '',
-      uv != null ? `<div class="w-stat"><span class="w-stat-val w-uv-${uvState}">${uv}</span><span class="w-stat-lbl">UV Index</span></div>` : '',
-      w.wind_speed != null ? `<div class="w-stat"><span class="w-stat-val">${Math.round(w.wind_speed)}</span><span class="w-stat-lbl">mph Wind</span></div>` : '',
-    ].filter(Boolean).join('');
-
-    const impactsHtml = insights.length ? `
-      <div class="weather-pool-impacts">
-        ${insights.map(i => `
-          <div class="pool-impact-row impact-${i.level}">
-            <span class="impact-icon">${i.icon}</span>
-            <span class="impact-text">${i.text}</span>
-          </div>`).join('')}
-      </div>` : '';
+    const items = insights.map(i => {
+      const navFn  = ACTION_NAV[i.action] ? ACTION_NAV[i.action]() : "App.navigate('quick-entry')";
+      const dotCls = `insight-dot insight-${i.priority}`;
+      return `
+        <div class="flex items-start gap-3 py-2.5 border-b border-pool-border last:border-0">
+          <div class="${dotCls} mt-1.5"></div>
+          <div class="flex-1 min-w-0">
+            <p class="text-[13px] leading-snug" style="color:rgba(245,245,247,0.8)">${this._escape(i.message)}</p>
+          </div>
+          <button onclick="${navFn}" class="flex-shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+            style="background:rgba(0,200,212,0.1);color:#00C8D4;border:none;cursor:pointer;white-space:nowrap">
+            ${i.actionLabel}
+          </button>
+        </div>`;
+    }).join('');
 
     return `
-      <div class="weather-insights-section">
-        <div class="section-title">Weather &amp; Pool Impact</div>
-        <div class="weather-card">
-          <div class="weather-stats-row">${statItems}</div>
-          ${impactsHtml}
-        </div>
+      <div class="bento-card">
+        <div class="bento-label mb-0">💡 What's Next</div>
+        <div class="mt-1">${items}</div>
       </div>`;
   },
 
-  // ── Pool Care Reminders ───────────────────────────────────────
+  // ── Weather Card ──────────────────────────────────────────────
+  _hasWeather(d) {
+    return d.weather && d.weather.air_temp_f != null;
+  },
+
+  renderWeatherCard(d) {
+    if (!this._hasWeather(d)) return '';
+    const w    = d.weather;
+    const tempF= Math.round(w.air_temp_f);
+    const uv   = w.uv_index != null ? Math.round(w.uv_index) : null;
+    const uvLbl= uv == null ? null : uv >= 8 ? 'Very High' : uv >= 6 ? 'High' : uv >= 3 ? 'Moderate' : 'Low';
+    const uvClr= uv >= 8 ? '#FF453A' : uv >= 6 ? '#FFD60A' : '#30D158';
+
+    const stats = [
+      `<div class="flex flex-col items-center gap-0.5">
+        <span class="text-[22px] font-bold text-pool-text">${tempF}°</span>
+        <span class="text-[10px] text-pool-muted">${w.condition || 'Air'}</span>
+       </div>`,
+      uv != null ? `<div class="flex flex-col items-center gap-0.5">
+        <span class="text-[22px] font-bold" style="color:${uvClr}">${uv}</span>
+        <span class="text-[10px] text-pool-muted">UV ${uvLbl}</span>
+       </div>` : '',
+      w.humidity != null ? `<div class="flex flex-col items-center gap-0.5">
+        <span class="text-[22px] font-bold text-pool-text">${Math.round(w.humidity)}%</span>
+        <span class="text-[10px] text-pool-muted">Humidity</span>
+       </div>` : '',
+      w.wind_speed != null ? `<div class="flex flex-col items-center gap-0.5">
+        <span class="text-[22px] font-bold text-pool-text">${Math.round(w.wind_speed)}</span>
+        <span class="text-[10px] text-pool-muted">mph Wind</span>
+       </div>` : '',
+    ].filter(Boolean).join('');
+
+    const impacts = [];
+    if (uv != null && uv >= 6) impacts.push({ icon:'☀️', text:`UV ${uv} (${uvLbl}) — chlorine degrades faster. Consider testing today.` });
+    if (tempF >= 85)            impacts.push({ icon:'🌡️', text:`Hot weather (${tempF}°F) accelerates algae growth. Test more frequently.` });
+    if (w.wind_speed > 15)      impacts.push({ icon:'🌬️', text:`Gusty winds — check your skimmer basket for debris.` });
+
+    return `
+      <div class="bento-card">
+        <div class="bento-label">🌤 Weather &amp; Pool Impact</div>
+        <div class="flex justify-around py-2">${stats}</div>
+        ${impacts.length ? `<div class="mt-3 flex flex-col gap-2">${impacts.map(i =>
+          `<div class="flex gap-2 text-[12px]" style="color:rgba(245,245,247,0.65)">
+            <span>${i.icon}</span><span>${i.text}</span>
+          </div>`).join('')}</div>` : ''}
+      </div>`;
+  },
+
+  // ── Reminders ─────────────────────────────────────────────────
   _FORM_TASKS: {
     test_water:   { tab: 'test' },
     add_chlorine: { tab: 'chem', preselect: 'chlorine' },
@@ -547,233 +407,330 @@ const DashboardPage = {
   async _logDirectTask(taskType, entryDate, notes, fullness = null) {
     await API.logPoolCareAction({
       task_type: taskType,
-      ...(entryDate ? { entry_date: entryDate } : {}),
-      ...(notes ? { notes } : {}),
-      ...(fullness != null ? { fullness } : {}),
+      ...(entryDate  ? { entry_date: entryDate } : {}),
+      ...(notes      ? { notes }                 : {}),
+      ...(fullness != null ? { fullness }        : {}),
     });
   },
 
   _buildLogForm(taskType, displayName, isBasketTask = false) {
     const today = new Date().toISOString().split('T')[0];
     const fullnessRow = isBasketTask ? `
-      <div class="log-fullness-row">
-        <span class="log-when-label">How full?</span>
-        <div class="log-fullness-btns">
-          <button class="log-fullness-btn" data-fullness="0">Empty</button>
-          <button class="log-fullness-btn" data-fullness="25">¼ Full</button>
-          <button class="log-fullness-btn" data-fullness="50">½ Full</button>
-          <button class="log-fullness-btn" data-fullness="75">¾ Full</button>
-          <button class="log-fullness-btn" data-fullness="100">Full</button>
+      <div class="mt-3">
+        <div class="text-[11px] text-pool-muted mb-2">How full?</div>
+        <div class="flex gap-2 flex-wrap">
+          ${[['0','Empty'],['25','¼ Full'],['50','½ Full'],['75','¾ Full'],['100','Full']].map(([v,l]) =>
+            `<button class="log-fullness-btn" data-fullness="${v}">${l}</button>`).join('')}
         </div>
       </div>` : '';
-    return `<div class="reminder-log-form">
-      <div class="log-when-row">
-        <span class="log-when-label">When?</span>
-        <div class="log-presets">
+    return `
+      <div class="mt-3 p-4 rounded-2xl" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)">
+        <div class="text-[11px] text-pool-muted mb-2">When?</div>
+        <div class="flex gap-2 flex-wrap mb-2">
           <button class="log-preset active" data-days="0">Today</button>
           <button class="log-preset" data-days="1">Yesterday</button>
           <button class="log-preset" data-days="2">2 days ago</button>
-          <button class="log-preset" data-days="3">3 days ago</button>
           <button class="log-preset" data-days="-1">Other…</button>
         </div>
-        <input type="date" class="log-date-input" value="${today}" max="${today}">
-      </div>
-      ${fullnessRow}
-      <textarea class="log-note-textarea" placeholder="Notes (optional)…" rows="2"></textarea>
-      <div class="log-form-btns">
-        <button class="log-cancel">Cancel</button>
-        <button class="log-confirm" data-task="${taskType}">✅ Log Entry</button>
-      </div>
-    </div>`;
+        <input type="date" class="log-date-input" value="${today}" max="${today}" style="display:none;margin-bottom:8px">
+        ${fullnessRow}
+        <textarea class="mt-3" rows="2" placeholder="Notes (optional)…" style="font-size:13px"></textarea>
+        <div class="flex gap-2 mt-3">
+          <button class="btn btn-secondary btn-sm log-cancel flex-1">Cancel</button>
+          <button class="btn btn-primary btn-sm log-confirm flex-1" data-task="${taskType}">✓ Log Entry</button>
+        </div>
+      </div>`;
   },
 
   renderReminders(d) {
     if (!d.reminders || d.reminders.length === 0) return '';
+
+    const URGENCY_COLOR = { urgent:'#FF453A', overdue:'#FFD60A', due_soon:'#00C8D4', good:'#30D158' };
+    const URGENCY_LABEL = { urgent:'Urgent', overdue:'Overdue', due_soon:'Due Soon', good:'Good' };
+
     const items = d.reminders.slice(0, 8).map(r => {
-      const badgeClass = r.urgency === 'urgent' ? 'badge-danger'
-        : r.urgency === 'overdue' ? 'badge-warning'
-        : r.urgency === 'due_soon' ? 'badge-info' : 'badge-success';
-      const badgeText = r.urgency === 'good' ? '✓ Good'
-        : r.urgency === 'due_soon' ? 'Due Soon'
-        : r.urgency === 'overdue' ? 'Overdue' : '⚠ Urgent';
-      let detail = r.days_since != null
+      const color     = URGENCY_COLOR[r.urgency] || '#666';
+      const label     = URGENCY_LABEL[r.urgency] || r.urgency;
+      const detail    = r.days_since != null
         ? `${r.days_since}d ago · every ${r.interval_days}d`
         : `Every ${r.interval_days}d · never done`;
-      if (r.suggested_interval_days) {
-        const arrow = r.suggested_interval_days < r.interval_days ? '↑' : '↓';
-        detail += ` · ${arrow} try every ${r.suggested_interval_days}d`;
-      }
-      const isFormTask = !!this._FORM_TASKS[r.task_type];
-      const doneLabel = isFormTask ? '→ Log Now' : 'Done';
-      const doneTip = isFormTask ? 'Opens the entry form' : 'Tap to log with date options';
-      const isBasketTask = r.task_type === 'clean_skimmer' || r.task_type === 'empty_basket';
+      const isForm    = !!this._FORM_TASKS[r.task_type];
+      const isBasket  = r.task_type === 'clean_skimmer' || r.task_type === 'empty_basket';
       return `
-        <div class="reminder-item reminder-urgency-${r.urgency}" data-task="${r.task_type}">
-          <div class="reminder-track">
-            <div class="reminder-main" title="Tap to reveal actions">
-              <div class="reminder-icon reminder-urgency-${r.urgency}">${r.icon}</div>
-              <div class="reminder-info">
-                <div class="reminder-name">${r.display_name}</div>
-                <div class="reminder-detail">${detail}</div>
-              </div>
-              <span class="badge ${badgeClass}">${badgeText}</span>
-              <span style="color:var(--text-muted);font-size:var(--fs-xs);margin-left:4px">›</span>
+        <div class="reminder-item py-3 border-b border-pool-border last:border-0" data-task="${r.task_type}">
+          <div class="reminder-main flex items-center gap-3 cursor-pointer" title="Tap to act">
+            <span style="font-size:1.3rem;width:28px;text-align:center">${r.icon || '🔧'}</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-[14px] font-medium text-pool-text">${r.display_name}</div>
+              <div class="text-[11px] text-pool-muted mt-0.5">${detail}</div>
             </div>
-            <div class="reminder-actions">
-              <button class="reminder-action-btn reminder-action-done" data-done="${r.task_type}"
-                data-name="${r.display_name}" data-form-task="${isFormTask}"
-                data-basket-task="${isBasketTask}" title="${doneTip}">
-                <span class="action-icon">${isFormTask ? '📋' : '✅'}</span>${doneLabel}
-              </button>
-              <button class="reminder-action-btn reminder-action-skip" data-skip="${r.task_type}">
-                <span class="action-icon">⏭</span>Skip
-              </button>
-            </div>
+            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+              style="background:${color}1a;color:${color};flex-shrink:0">${label}</span>
+            <span class="text-pool-subtle text-[12px]">›</span>
           </div>
+          <div class="reminder-actions-row" style="display:none">
+            <button class="btn btn-sm flex-1 reminder-action-done"
+              data-done="${r.task_type}" data-name="${r.display_name}"
+              data-form-task="${isForm}" data-basket-task="${isBasket}">
+              ${isForm ? '📋 Log Now' : '✓ Done'}
+            </button>
+            <button class="btn btn-sm btn-secondary flex-1 reminder-action-skip" data-skip="${r.task_type}">
+              Skip
+            </button>
+          </div>
+          <div class="reminder-form-container"></div>
         </div>`;
     }).join('');
+
     return `
-      <div class="reminders-section">
-        <div class="section-title">Pool Care <span style="font-size:var(--fs-xs);color:var(--text-muted);font-weight:normal;text-transform:none;letter-spacing:0">· tap to act</span></div>
-        <div id="remindersContainer">${items}</div>
+      <div class="bento-card" id="remindersContainer">
+        <div class="bento-label">🔧 Pool Care</div>
+        ${items}
       </div>`;
   },
 
   bindReminders() {
     document.querySelectorAll('.reminder-main').forEach(main => {
       main.addEventListener('click', () => {
-        const item = main.closest('.reminder-item');
-        const wasOpen = item.classList.contains('actions-open');
-        document.querySelectorAll('.reminder-item.actions-open').forEach(el => el.classList.remove('actions-open'));
-        if (!wasOpen) item.classList.add('actions-open');
+        const item    = main.closest('.reminder-item');
+        const actionsRow = item.querySelector('.reminder-actions-row');
+        const wasOpen = actionsRow.style.display !== 'none';
+        // Close all others
+        document.querySelectorAll('.reminder-item .reminder-actions-row').forEach(r => r.style.display = 'none');
+        actionsRow.style.display = wasOpen ? 'none' : 'flex';
       });
     });
 
+    // Close when clicking outside
     document.addEventListener('click', e => {
       if (!e.target.closest('.reminder-item')) {
-        document.querySelectorAll('.reminder-item.actions-open').forEach(el => el.classList.remove('actions-open'));
+        document.querySelectorAll('.reminder-item .reminder-actions-row').forEach(r => r.style.display = 'none');
       }
     }, { capture: true });
 
-    document.querySelectorAll('[data-done]').forEach(btn => {
+    document.querySelectorAll('.reminder-action-done').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
-        const taskType    = btn.dataset.done;
-        const name        = btn.dataset.name || taskType;
-        const isForm      = btn.dataset.formTask === 'true';
-        const isBasket    = btn.dataset.basketTask === 'true';
-        const item        = btn.closest('.reminder-item');
+        const taskType = btn.dataset.done;
+        const name     = btn.dataset.name || taskType;
+        const isForm   = btn.dataset.formTask === 'true';
+        const isBasket = btn.dataset.basketTask === 'true';
+        const item     = btn.closest('.reminder-item');
 
         if (isForm) {
           const cfg = this._FORM_TASKS[taskType];
-          if (cfg.preselect) QuickEntryPage.selectedChemical = cfg.preselect;
+          if (cfg?.preselect) QuickEntryPage.selectedChemical = cfg.preselect;
           QuickEntryPage.pendingReminder = { task_type: taskType, display_name: name };
           App.navigate('quick-entry', { tab: cfg.tab });
           return;
         }
 
-        // Close slide-out actions and show inline form below the track
-        item.classList.remove('actions-open');
-        item.querySelector('.reminder-form-wrap')?.remove();
-        const wrap = document.createElement('div');
-        wrap.className = 'reminder-form-wrap';
-        wrap.innerHTML = this._buildLogForm(taskType, name, isBasket);
-        item.appendChild(wrap);
-        const form = wrap.querySelector('.reminder-log-form');
+        item.querySelector('.reminder-actions-row').style.display = 'none';
+        const container = item.querySelector('.reminder-form-container');
+        container.innerHTML = this._buildLogForm(taskType, name, isBasket);
 
-        form.querySelectorAll('.log-preset').forEach(p => {
+        container.querySelectorAll('.log-preset').forEach(p => {
           p.addEventListener('click', () => {
-            form.querySelectorAll('.log-preset').forEach(x => x.classList.remove('active'));
+            container.querySelectorAll('.log-preset').forEach(x => x.classList.remove('active'));
             p.classList.add('active');
-            const days = parseInt(p.dataset.days);
-            const dateInput = form.querySelector('.log-date-input');
-            if (days === -1) {
-              dateInput.style.display = 'block';
-              dateInput.focus();
-            } else {
+            const days     = parseInt(p.dataset.days);
+            const dateInput= container.querySelector('.log-date-input');
+            if (days === -1) { dateInput.style.display = 'block'; dateInput.focus(); }
+            else {
               dateInput.style.display = 'none';
-              const d = new Date();
-              d.setDate(d.getDate() - days);
-              dateInput.value = d.toISOString().split('T')[0];
+              const d2 = new Date(); d2.setDate(d2.getDate() - days);
+              dateInput.value = d2.toISOString().split('T')[0];
             }
           });
         });
 
-        form.querySelectorAll('.log-fullness-btn').forEach(fb => {
+        container.querySelectorAll('.log-fullness-btn').forEach(fb => {
           fb.addEventListener('click', () => {
-            form.querySelectorAll('.log-fullness-btn').forEach(x => x.classList.remove('active'));
+            container.querySelectorAll('.log-fullness-btn').forEach(x => x.classList.remove('active'));
             fb.classList.add('active');
           });
         });
 
-        form.querySelector('.log-cancel').addEventListener('click', e => {
+        container.querySelector('.log-cancel')?.addEventListener('click', e => {
           e.stopPropagation();
-          wrap.remove();
+          container.innerHTML = '';
         });
 
-        form.querySelector('.log-confirm').addEventListener('click', async e => {
+        container.querySelector('.log-confirm')?.addEventListener('click', async e => {
           e.stopPropagation();
           try {
-            const dateInput = form.querySelector('.log-date-input');
-            const today = new Date().toISOString().split('T')[0];
+            const today     = new Date().toISOString().split('T')[0];
+            const dateInput = container.querySelector('.log-date-input');
             const entryDate = (dateInput.value && dateInput.value !== today)
-              ? new Date(dateInput.value + 'T12:00:00').toISOString()
-              : null;
-            const notes = form.querySelector('.log-note-textarea')?.value?.trim() || null;
-            const activeFullness = form.querySelector('.log-fullness-btn.active');
-            const fullness = activeFullness ? parseInt(activeFullness.dataset.fullness) : null;
+              ? new Date(dateInput.value + 'T12:00:00').toISOString() : null;
+            const notes   = container.querySelector('textarea')?.value?.trim() || null;
+            const activeFB= container.querySelector('.log-fullness-btn.active');
+            const fullness= activeFB ? parseInt(activeFB.dataset.fullness) : null;
             await this._logDirectTask(taskType, entryDate, notes, fullness);
             item.classList.add('completing');
-            Toast.success(`${name} logged! ✅`);
-            setTimeout(() => item.remove(), 400);
+            Toast.success(`${name} logged! ✓`);
+            setTimeout(() => item.remove(), 350);
           } catch (err) { Toast.error('Failed: ' + err.message); }
         });
       });
     });
 
-    document.querySelectorAll('[data-skip]').forEach(btn => {
+    document.querySelectorAll('.reminder-action-skip').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation();
         const taskType = btn.dataset.skip;
-        const item = btn.closest('.reminder-item');
+        const item     = btn.closest('.reminder-item');
         try {
           await API.dismissMaintenance(taskType);
-          item.classList.remove('actions-open');
           item.classList.add('dismissing');
-          Toast.info('Reminder snoozed — clock reset ⏭');
-          setTimeout(() => item.remove(), 300);
+          Toast.info('Reminder snoozed ⏭');
+          setTimeout(() => item.remove(), 280);
         } catch (err) { Toast.error('Failed: ' + err.message); }
       });
     });
 
+    // Swipe-to-reveal on touch
     document.querySelectorAll('.reminder-item').forEach(item => {
       let startX = 0;
       item.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
       item.addEventListener('touchend', e => {
         const dx = e.changedTouches[0].clientX - startX;
+        const actionsRow = item.querySelector('.reminder-actions-row');
         if (dx < -40) {
-          document.querySelectorAll('.reminder-item.actions-open').forEach(el => el.classList.remove('actions-open'));
-          item.classList.add('actions-open');
-        } else if (dx > 30) {
-          item.classList.remove('actions-open');
-        }
+          document.querySelectorAll('.reminder-actions-row').forEach(r => r.style.display = 'none');
+          actionsRow.style.display = 'flex';
+        } else if (dx > 30) { actionsRow.style.display = 'none'; }
       }, { passive: true });
     });
+  },
+
+  // ── Trends ────────────────────────────────────────────────────
+  renderTrends() {
+    if (!this.trends || Object.keys(this.trends).length === 0) return '';
+    return `
+      <div class="bento-card">
+        <div class="flex items-center justify-between mb-3">
+          <div class="bento-label mb-0">📈 Trends</div>
+          <div class="flex gap-1">
+            <button class="trend-toggle-btn${this._trendDays === 7  ? ' active':''}" data-days="7">7d</button>
+            <button class="trend-toggle-btn${this._trendDays === 14 ? ' active':''}" data-days="14">14d</button>
+            <button class="trend-toggle-btn${this._trendDays === 30 ? ' active':''}" data-days="30">30d</button>
+          </div>
+        </div>
+        <div id="trendCharts">${this._renderTrendCharts(this._trendDays)}</div>
+      </div>`;
+  },
+
+  _renderTrendCharts(days) {
+    const paramConfig = {
+      total_chlorine:   { label:'Total Cl',  color:'#D46B94', unit:'ppm' },
+      free_chlorine:    { label:'Free Cl',   color:'#E8A0B4', unit:'ppm' },
+      ph:               { label:'pH',        color:'#5B9B3E', unit:''    },
+      alkalinity:       { label:'Alkalinity',color:'#3B8C4A', unit:'ppm' },
+      cyanuric_acid:    { label:'CYA',       color:'#C87098', unit:'ppm' },
+      bromine:          { label:'Bromine',   color:'#B83878', unit:'ppm' },
+      calcium_hardness: { label:'Hardness',  color:'#5858C0', unit:'ppm' },
+    };
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+
+    let charts = '';
+    for (const [param, allPoints] of Object.entries(this.trends)) {
+      const points = allPoints.filter(p => !p.date || new Date(p.date) >= cutoff);
+      if (points.length < 2) continue;
+      const cfg   = paramConfig[param] || { label: param, color: '#00C8D4', unit: '' };
+      const spec  = Chemistry.ranges[param];
+      const latest= points[points.length - 1].value;
+      const trend = this._getTrendDir(param);
+      const sym   = trend === 'up' ? '↗' : trend === 'down' ? '↘' : '';
+      charts += `
+        <div class="flex items-center gap-3 py-2.5 border-b border-pool-border last:border-0">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[12px] font-medium text-pool-muted">${cfg.label}</span>
+              <span class="text-[13px] font-semibold" style="color:${cfg.color}">${latest}${cfg.unit ? ' '+cfg.unit:''} ${sym}</span>
+            </div>
+            <div class="trend-chart">${this.renderSparkline(points, cfg.color, spec)}</div>
+          </div>
+        </div>`;
+    }
+    return charts || `<div class="text-center text-[13px] text-pool-muted py-4">Not enough data for this range.</div>`;
+  },
+
+  bindTrendToggle() {
+    document.querySelectorAll('.trend-toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const days = parseInt(btn.dataset.days);
+        this._trendDays = days;
+        document.querySelectorAll('.trend-toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+        const el = document.getElementById('trendCharts');
+        if (el) el.innerHTML = this._renderTrendCharts(days);
+      });
+    });
+  },
+
+  _getTrendDir(param) {
+    const pts = this.trends?.[param];
+    if (!pts || pts.length < 4) return null;
+    const slice = pts.slice(-6);
+    const first = slice[0].value, last = slice[slice.length - 1].value;
+    const diff  = last - first;
+    const thr   = { ph:0.15, free_chlorine:0.5, total_chlorine:0.5, alkalinity:8, cyanuric_acid:5, calcium_hardness:20, bromine:0.5 }[param]
+      ?? (Math.abs(first) * 0.08 || 0.5);
+    return diff > thr ? 'up' : diff < -thr ? 'down' : 'stable';
+  },
+
+  // ── Active Plan Card ──────────────────────────────────────────
+  renderPlanCard() {
+    const plan = this.activePlan;
+    if (!plan) {
+      return `
+        <div class="bento-card flex items-center gap-3 cursor-pointer" onclick="App.navigate('treatment-plan')">
+          <div style="font-size:1.5rem">🧪</div>
+          <div class="flex-1">
+            <div class="text-[14px] font-semibold text-pool-text">No active treatment plan</div>
+            <div class="text-[12px] text-pool-muted mt-0.5">Build a step-by-step plan to fix pool issues</div>
+          </div>
+          <span class="text-pool-muted text-[16px]">›</span>
+        </div>`;
+    }
+    const total = plan.steps_total || 0;
+    const done  = plan.steps_completed || 0;
+    const pct   = total ? Math.round((done / total) * 100) : 0;
+    return `
+      <div class="bento-card cursor-pointer" onclick="App.navigate('treatment-plan')">
+        <div class="flex items-center gap-3 mb-3">
+          <div style="font-size:1.5rem">🧪</div>
+          <div class="flex-1">
+            <div class="text-[14px] font-semibold text-pool-text">${this._escape(plan.condition_label)}</div>
+            <div class="text-[12px] text-pool-muted mt-0.5">${done} of ${total} steps complete</div>
+          </div>
+          <span class="text-[11px] font-semibold px-2 py-1 rounded-lg" style="background:rgba(0,200,212,0.1);color:#00C8D4">Resume →</span>
+        </div>
+        <div style="height:4px;border-radius:2px;background:rgba(255,255,255,0.07)">
+          <div style="height:100%;width:${pct}%;border-radius:2px;background:linear-gradient(90deg,#00C8D4,#0A84FF);transition:width 0.5s ease"></div>
+        </div>
+      </div>`;
   },
 
   // ── Recent Activity ───────────────────────────────────────────
   renderRecent(d) {
     if (!d.recent_entries || d.recent_entries.length === 0) return '';
-    const items = d.recent_entries.slice(0, 5).map(e => `
-      <div class="activity-item">
-        <span class="activity-icon">${Fmt.entryTypeIcon(e.entry_type)}</span>
-        <span class="activity-text">${Fmt.entryTypeLabel(e.entry_type)}${e.notes ? ' — ' + e.notes.substring(0, 40) : ''}</span>
-        <span class="activity-time">${Fmt.timeAgo(e.entry_date)}</span>
+    const items = d.recent_entries.slice(0, 4).map(e => `
+      <div class="flex items-center gap-3 py-2.5 border-b border-pool-border last:border-0">
+        <span style="font-size:1.1rem;width:24px;text-align:center">${Fmt.entryTypeIcon(e.entry_type)}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-[13px] text-pool-text truncate">${Fmt.entryTypeLabel(e.entry_type)}${e.notes ? ' — ' + e.notes.substring(0,35) : ''}</div>
+        </div>
+        <span class="text-[11px] text-pool-muted flex-shrink-0">${Fmt.timeAgo(e.entry_date)}</span>
       </div>`).join('');
     return `
-      <div class="recent-section">
-        <div class="section-title">Recent Activity</div>
-        <div class="card">${items}</div>
+      <div class="bento-card">
+        <div class="bento-label">🕒 Recent Activity</div>
+        ${items}
+        <button class="w-full mt-3 text-[12px] text-pool-muted hover:text-pool-accent transition-colors" onclick="App.navigate('history')">
+          View full journal →
+        </button>
       </div>`;
   },
 
@@ -787,26 +744,32 @@ const DashboardPage = {
       yMax = Math.max(yMax, spec.idealHigh * 1.1);
     }
     if (yMin === yMax) { yMin -= 1; yMax += 1; }
-    const xScale = (w - 2 * pad) / (points.length - 1);
-    const yScale = (h - 2 * pad) / (yMax - yMin);
+    const xScale = (w - 2*pad) / (points.length - 1);
+    const yScale = (h - 2*pad) / (yMax - yMin);
     const toX = i => pad + i * xScale;
     const toY = v => h - pad - (v - yMin) * yScale;
-    const linePoints = points.map((p, i) => `${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(' ');
-    const areaPoints = linePoints + ` ${toX(points.length - 1).toFixed(1)},${(h - pad).toFixed(1)} ${toX(0).toFixed(1)},${(h - pad).toFixed(1)}`;
+    const linePoints = points.map((p,i) => `${toX(i).toFixed(1)},${toY(p.value).toFixed(1)}`).join(' ');
+    const areaPoints = linePoints + ` ${toX(points.length-1).toFixed(1)},${(h-pad).toFixed(1)} ${toX(0).toFixed(1)},${(h-pad).toFixed(1)}`;
     let idealZone = '';
     if (spec?.idealLow != null && spec?.idealHigh != null) {
       const iy1 = toY(spec.idealHigh), iy2 = toY(spec.idealLow);
-      idealZone = `<rect x="0" y="${Math.min(iy1, iy2).toFixed(1)}" width="${w}" height="${Math.abs(iy2 - iy1).toFixed(1)}" class="trend-ideal-zone"/>`;
+      idealZone = `<rect x="0" y="${Math.min(iy1,iy2).toFixed(1)}" width="${w}" height="${Math.abs(iy2-iy1).toFixed(1)}" class="trend-ideal-zone"/>`;
       idealZone += `<line x1="0" y1="${iy1.toFixed(1)}" x2="${w}" y2="${iy1.toFixed(1)}" class="trend-ideal-line"/>`;
       idealZone += `<line x1="0" y1="${iy2.toFixed(1)}" x2="${w}" y2="${iy2.toFixed(1)}" class="trend-ideal-line"/>`;
     }
     const lastI = points.length - 1;
-    const dot = `<circle cx="${toX(lastI).toFixed(1)}" cy="${toY(points[lastI].value).toFixed(1)}" class="trend-dot" stroke="${color}"/>`;
+    const dot   = `<circle cx="${toX(lastI).toFixed(1)}" cy="${toY(points[lastI].value).toFixed(1)}" class="trend-dot" stroke="${color}"/>`;
     return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
       ${idealZone}
       <polygon points="${areaPoints}" class="trend-area" fill="${color}"/>
       <polyline points="${linePoints}" class="trend-line" stroke="${color}"/>
       ${dot}
     </svg>`;
+  },
+
+  // ── Helpers ───────────────────────────────────────────────────
+  _healthColor(score) {
+    const stops = { 1:'#2D4A1E',2:'#3B5E28',3:'#4A7232',4:'#5A8A3C',5:'#5A9A6A',6:'#4A9AAA',7:'#3AACCC',8:'#2BB8DD',9:'#1CC8EE',10:'#00D4FF' };
+    return stops[Math.round(score)] || '#F5F5F7';
   },
 };
