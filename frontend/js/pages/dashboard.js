@@ -44,7 +44,7 @@ const DashboardPage = {
   buildHTML(d) {
     const insights = Insights.compute(d, this.activePlan);
     return `
-      <div class="px-4 pt-5 pb-2 max-w-[480px] mx-auto">
+      <div class="px-4 pt-5 pb-2">
         ${d.pool_status === 'closed' ? this.renderClosedBanner(d) : ''}
 
         <div class="grid grid-cols-2 gap-3">
@@ -718,7 +718,6 @@ const DashboardPage = {
     if (!d.recent_entries || d.recent_entries.length === 0) return '';
     const items = d.recent_entries.slice(0, 4).map(e => `
       <div class="flex items-center gap-3 py-2.5 border-b border-pool-border last:border-0">
-        <span style="font-size:1.1rem;width:24px;text-align:center">${Fmt.entryTypeIcon(e.entry_type)}</span>
         <div class="flex-1 min-w-0">
           <div class="text-[13px] text-pool-text truncate">${Fmt.entryTypeLabel(e.entry_type)}${e.notes ? ' — ' + e.notes.substring(0,35) : ''}</div>
         </div>

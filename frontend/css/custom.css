@@ -744,6 +744,31 @@ textarea { resize: vertical; min-height: 80px; }
   color: rgba(245,245,247,0.35); padding: 0 4px; margin: 22px 0 8px;
 }
 
+/* ── Responsive content container ────────────── */
+@media (min-width: 680px) {
+  #pageContent {
+    max-width: 680px;
+    margin: 0 auto;
+    border-left: 1px solid rgba(255,255,255,0.04);
+    border-right: 1px solid rgba(255,255,255,0.04);
+  }
+  .bottom-nav {
+    width: 680px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    border-radius: 20px 20px 0 0;
+    border-left: 1px solid rgba(255,255,255,0.08);
+    border-right: 1px solid rgba(255,255,255,0.08);
+  }
+  .filter-drawer {
+    max-width: 680px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+}
+
 /* ── Slider value bubble ──────────────────────── */
 .slider-wrap { position: relative; }
 .slider-bubble {
