@@ -152,9 +152,10 @@ async def log_pool_care_action(data: PoolCareActionCreate, db: AsyncSession = De
         entry = JournalEntry(entry_type="maintenance", entry_date=entry_dt, notes=data.notes)
         db.add(entry)
         await db.flush()
+        details = {"inches": data.inches} if data.task_type == "add_water" and data.inches is not None else None
         action = MaintenanceAction(
             journal_entry_id=entry.id, performed_at=entry_dt,
-            action_type=sub_type, notes=data.notes,
+            action_type=sub_type, notes=data.notes, details=details,
         )
         db.add(action)
         await db.flush()

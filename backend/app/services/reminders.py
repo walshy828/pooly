@@ -19,7 +19,7 @@ DEFAULT_SCHEDULES = [
     {"task_type": "robot_run", "display_name": "Run Pool Robot", "interval_days": 7, "priority": "low", "icon": "🤖"},
     {"task_type": "vacuum", "display_name": "Vacuum Pool", "interval_days": 14, "priority": "low", "icon": "🌊"},
     {"task_type": "empty_basket", "display_name": "Empty Pump Basket", "interval_days": 7, "priority": "normal", "icon": "🗑️"},
-    {"task_type": "add_water", "display_name": "Check Water Level", "interval_days": 7, "priority": "low", "icon": "💧"},
+    {"task_type": "add_water", "display_name": "Add Water", "interval_days": 7, "priority": "low", "icon": "💧"},
     {"task_type": "brush_walls", "display_name": "Brush Pool Walls", "interval_days": 7, "priority": "low", "icon": "🖌️"},
     {"task_type": "check_cya", "display_name": "Check CYA Level", "interval_days": 30, "priority": "normal", "icon": "☀️"},
     {"task_type": "backwash", "display_name": "Backwash / Deep Clean Filter", "interval_days": 30, "priority": "normal", "icon": "♻️"},

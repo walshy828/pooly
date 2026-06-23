@@ -74,4 +74,5 @@ class PoolCareActionCreate(BaseModel):
     task_type: str
     entry_date: Optional[datetime] = None
     notes: Optional[str] = None
-    fullness: Optional[int] = None  # 0-100, for basket tasks only
+    fullness: Optional[int] = None    # 0-100, for basket tasks
+    inches: Optional[float] = None    # water added in inches, for add_water

@@ -92,16 +92,16 @@ const Chemistry = {
     chlorine:     null,
   },
 
+  // extra: 'fullness' | 'inches' | null — drives contextual options after selection
   poolCareActions: [
-    { type: 'clean_skimmer',   icon: '🗑️', label: 'Empty Skimmer',         isBasket: true  },
-    { type: 'empty_basket',    icon: '🗑️', label: 'Empty Pump Basket',      isBasket: true  },
-    { type: 'robot_run',       icon: '🤖', label: 'Run Pool Robot',          isBasket: false },
-    { type: 'vacuum',          icon: '🌊', label: 'Vacuum Pool',             isBasket: false },
-    { type: 'brush_walls',     icon: '🖌️', label: 'Brush Walls',            isBasket: false },
-    { type: 'clean_cartridge', icon: '🔧', label: 'Clean Filter Cartridge', isBasket: false },
-    { type: 'backwash',        icon: '♻️', label: 'Backwash Filter',        isBasket: false },
-    { type: 'add_water',       icon: '💧', label: 'Check Water Level',       isBasket: false },
-    { type: 'clear_water',     icon: '💧', label: 'Clear Water',             isBasket: false },
+    { type: 'clean_skimmer',   icon: '🗑️', label: 'Empty Skimmer',         extra: 'fullness' },
+    { type: 'empty_basket',    icon: '🗑️', label: 'Empty Pump Basket',      extra: 'fullness' },
+    { type: 'robot_run',       icon: '🤖', label: 'Run Pool Robot',          extra: null       },
+    { type: 'vacuum',          icon: '🌊', label: 'Vacuum Pool',             extra: null       },
+    { type: 'brush_walls',     icon: '🖌️', label: 'Brush Walls',            extra: null       },
+    { type: 'clean_cartridge', icon: '🔧', label: 'Clean Filter Cartridge', extra: null       },
+    { type: 'backwash',        icon: '♻️', label: 'Backwash Filter',        extra: null       },
+    { type: 'add_water',       icon: '💧', label: 'Add Water',              extra: 'inches'   },
   ],
 
   healthLabels: {

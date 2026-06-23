@@ -14,6 +14,9 @@ const QuickEntryPage = {
   algaeLevel: 'none',
   healthScore: 7,
   completedCareActions: new Set(),
+  selectedCareAction: null,  // task_type of the currently highlighted care button
+  careFullness: null,        // 0-100, for basket tasks
+  careInches: 1.0,           // inches added, for add_water
   panelNotes: {},
   entryDate: null,        // null = now; ISO string = backdated
   pendingReminder: null,  // { task_type, display_name } when navigated from a reminder
@@ -29,6 +32,9 @@ const QuickEntryPage = {
     this.measurementValues = {};
     this.lastMeasurements = {};
     this.completedCareActions = new Set();
+    this.selectedCareAction = null;
+    this.careFullness = null;
+    this.careInches = 1.0;
     this.panelNotes = {};
     this.entryDate = null;
     this.algaeLevel = 'none';
@@ -823,11 +829,11 @@ const QuickEntryPage = {
     const today = this._todayStr();
     const selectedDate = this.entryDate ? new Date(this.entryDate).toISOString().split('T')[0] : today;
     const presets = [
-      { label: 'Today',     days: 0  },
-      { label: 'Yesterday', days: 1  },
-      { label: '2 days ago', days: 2 },
-      { label: '3 days ago', days: 3 },
-      { label: 'Other…',    days: -1 },
+      { label: 'Today',      days: 0  },
+      { label: 'Yesterday',  days: 1  },
+      { label: '2 days ago', days: 2  },
+      { label: '3 days ago', days: 3  },
+      { label: 'Other…',     days: -1 },
     ];
     const activeDays = this.entryDate
       ? Math.round((new Date(today + 'T12:00:00') - new Date(this.entryDate)) / 86400000)
@@ -845,21 +851,135 @@ const QuickEntryPage = {
     </div>`;
   },
 
+  _renderCareExtra(action) {
+    if (!action?.extra) return '';
+    if (action.extra === 'fullness') {
+      const levels = [
+        { value: 0,   label: 'Empty'   },
+        { value: 25,  label: '¼ Full'  },
+        { value: 50,  label: '½ Full'  },
+        { value: 75,  label: '¾ Full'  },
+        { value: 100, label: 'Full'    },
+      ];
+      const btns = levels.map(l =>
+        `<button class="log-fullness-btn${this.careFullness === l.value ? ' active' : ''}" data-fullness="${l.value}">${l.label}</button>`
+      ).join('');
+      return `<div class="care-extra-section">
+        <div class="care-extra-label">How full was it? <span class="care-extra-optional">(optional)</span></div>
+        <div class="log-fullness-btns">${btns}</div>
+      </div>`;
+    }
+    if (action.extra === 'inches') {
+      const val = this.careInches.toFixed(1);
+      return `<div class="care-extra-section">
+        <div class="care-extra-label">Inches of water added</div>
+        <div class="care-inches-stepper">
+          <button class="care-stepper-btn" id="careInchesDown"${this.careInches <= 0.5 ? ' disabled' : ''}>−</button>
+          <span class="care-stepper-val" id="careInchesVal">${val}"</span>
+          <button class="care-stepper-btn" id="careInchesUp"${this.careInches >= 12 ? ' disabled' : ''}>+</button>
+        </div>
+      </div>`;
+    }
+    return '';
+  },
+
   renderCarePanel() {
+    const sel = this.selectedCareAction;
+    const selAction = Chemistry.poolCareActions.find(a => a.type === sel);
+    const hasSelection = !!sel;
+
     const btns = Chemistry.poolCareActions.map(a => {
-      const done = this.completedCareActions.has(a.type) ? ' qs-done' : '';
-      return `<button class="quick-status-btn${done}" data-care="${a.type}" data-basket="${a.isBasket}">
+      const isSelected = a.type === sel ? ' qs-selected' : '';
+      const isDone     = !isSelected && this.completedCareActions.has(a.type) ? ' qs-done' : '';
+      return `<button class="quick-status-btn${isSelected}${isDone}" data-care="${a.type}">
         <span class="qs-icon">${a.icon}</span><span class="qs-label">${a.label}</span>
       </button>`;
     }).join('');
+
     return `${this.renderPendingReminderBanner()}
       ${this.renderCareDateRow()}
-      <div class="section-title" style="margin-top:var(--space-lg)">Pool Care</div>
+      <div class="section-title care-section-title">What did you do?</div>
       <div class="quick-status-grid" id="careGrid">${btns}</div>
-      <div id="careFullnessWrap"></div>
+      <div id="careExtra">${this._renderCareExtra(selAction)}</div>
       <div class="entry-notes-divider"></div>
       ${this.renderNotesSection('care')}
-      <button class="btn btn-secondary btn-block" id="submitCareNote">📝 Save Note</button>`;
+      <div class="care-action-btns">
+        <button class="btn btn-primary btn-block" id="logEntry"${!hasSelection ? ' disabled' : ''}>✅ Log Entry</button>
+        <button class="btn btn-secondary btn-block care-add-another" id="logAndAdd"${!hasSelection ? ' disabled' : ''}>Log &amp; Add Another</button>
+      </div>`;
+  },
+
+  _bindCareExtra() {
+    document.querySelectorAll('#careExtra .log-fullness-btn').forEach(fb => {
+      fb.addEventListener('click', () => {
+        document.querySelectorAll('#careExtra .log-fullness-btn').forEach(b => b.classList.remove('active'));
+        fb.classList.add('active');
+        this.careFullness = parseInt(fb.dataset.fullness);
+      });
+    });
+
+    const downBtn = document.getElementById('careInchesDown');
+    const upBtn   = document.getElementById('careInchesUp');
+    const valEl   = document.getElementById('careInchesVal');
+    if (downBtn && upBtn && valEl) {
+      downBtn.addEventListener('click', () => {
+        if (this.careInches > 0.5) {
+          this.careInches = Math.round((this.careInches - 0.5) * 10) / 10;
+          valEl.textContent = this.careInches.toFixed(1) + '"';
+          downBtn.disabled = this.careInches <= 0.5;
+          upBtn.disabled   = false;
+        }
+      });
+      upBtn.addEventListener('click', () => {
+        if (this.careInches < 12) {
+          this.careInches = Math.round((this.careInches + 0.5) * 10) / 10;
+          valEl.textContent = this.careInches.toFixed(1) + '"';
+          upBtn.disabled   = this.careInches >= 12;
+          downBtn.disabled = false;
+        }
+      });
+    }
+  },
+
+  async _submitCareEntry(andAddAnother = false) {
+    const taskType = this.selectedCareAction;
+    if (!taskType) return;
+    const action = Chemistry.poolCareActions.find(a => a.type === taskType);
+    const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
+
+    const payload = {
+      task_type: taskType,
+      ...(this.entryDate ? { entry_date: this.entryDate } : {}),
+      ...(notes ? { notes } : {}),
+      ...(action?.extra === 'fullness' && this.careFullness != null ? { fullness: this.careFullness } : {}),
+      ...(action?.extra === 'inches' ? { inches: this.careInches } : {}),
+    };
+
+    try {
+      await API.logPoolCareAction(payload);
+      this.completedCareActions.add(taskType);
+
+      if (andAddAnother) {
+        // Mark done, reset selection, re-render extra + buttons, clear notes
+        const doneBtn = document.querySelector(`.quick-status-btn[data-care="${taskType}"]`);
+        if (doneBtn) { doneBtn.classList.remove('qs-selected'); doneBtn.classList.add('qs-done'); }
+        this.selectedCareAction = null;
+        this.careFullness = null;
+        this.careInches = 1.0;
+        document.getElementById('careExtra').innerHTML = '';
+        const logEntry  = document.getElementById('logEntry');
+        const logAndAdd = document.getElementById('logAndAdd');
+        if (logEntry)  logEntry.disabled  = true;
+        if (logAndAdd) logAndAdd.disabled = true;
+        const noteEl = document.getElementById('panelNoteText');
+        if (noteEl) { noteEl.value = ''; this.panelNotes.care = ''; }
+        document.getElementById('careGrid')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        Toast.success(`${action?.label || taskType} logged! ✅`);
+      } else {
+        Toast.success(`${action?.label || taskType} logged! ✅`);
+        setTimeout(() => App.navigate('dashboard'), 400);
+      }
+    } catch (err) { Toast.error('Failed: ' + err.message); }
   },
 
   bindCarePanel() {
@@ -890,83 +1010,40 @@ const QuickEntryPage = {
       this.entryDate = this._dateInputToISO(e.target.value);
     });
 
-    // Care action button bindings
-    document.querySelectorAll('.quick-status-btn[data-care]').forEach(btn => {
-      btn.addEventListener('click', async () => {
+    // Care action button — single-select
+    document.querySelectorAll('#careGrid .quick-status-btn[data-care]').forEach(btn => {
+      btn.addEventListener('click', () => {
         const taskType = btn.dataset.care;
-        const isBasket = btn.dataset.basket === 'true';
+        const isAlreadySelected = this.selectedCareAction === taskType;
 
-        if (this.completedCareActions.has(taskType)) {
-          Toast.info(`${btn.querySelector('.qs-label').textContent} already logged ✅`);
-          return;
-        }
+        // Deselect all
+        document.querySelectorAll('#careGrid .quick-status-btn').forEach(b => b.classList.remove('qs-selected'));
 
-        if (isBasket) {
-          // Show inline fullness picker — remove any existing one first
-          const wrap = document.getElementById('careFullnessWrap');
-          const alreadyOpen = wrap.dataset.task === taskType && wrap.innerHTML;
-          wrap.innerHTML = '';
-          wrap.dataset.task = '';
-          if (alreadyOpen) return;
-
-          wrap.dataset.task = taskType;
-          wrap.innerHTML = `
-            <div class="care-fullness-row">
-              <span class="log-when-label">How full?</span>
-              <div class="log-fullness-btns">
-                <button class="log-fullness-btn" data-fullness="0">Empty</button>
-                <button class="log-fullness-btn" data-fullness="25">¼ Full</button>
-                <button class="log-fullness-btn" data-fullness="50">½ Full</button>
-                <button class="log-fullness-btn" data-fullness="75">¾ Full</button>
-                <button class="log-fullness-btn" data-fullness="100">Full</button>
-              </div>
-            </div>`;
-
-          wrap.querySelectorAll('.log-fullness-btn').forEach(fb => {
-            fb.addEventListener('click', async () => {
-              const fullness = parseInt(fb.dataset.fullness);
-              try {
-                const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
-                await API.logPoolCareAction({
-                  task_type: taskType,
-                  ...(this.entryDate ? { entry_date: this.entryDate } : {}),
-                  ...(notes ? { notes } : {}),
-                  fullness,
-                });
-                this.completedCareActions.add(taskType);
-                btn.classList.add('qs-done');
-                wrap.innerHTML = '';
-                wrap.dataset.task = '';
-                Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
-              } catch (err) { Toast.error('Failed: ' + err.message); }
-            });
-          });
+        if (isAlreadySelected) {
+          // Toggle off
+          this.selectedCareAction = null;
+          this.careFullness = null;
+          document.getElementById('careExtra').innerHTML = '';
+          document.getElementById('logEntry').disabled  = true;
+          document.getElementById('logAndAdd').disabled = true;
         } else {
-          try {
-            const notes = document.getElementById('panelNoteText')?.value?.trim() || null;
-            await API.logPoolCareAction({
-              task_type: taskType,
-              ...(this.entryDate ? { entry_date: this.entryDate } : {}),
-              ...(notes ? { notes } : {}),
-            });
-            this.completedCareActions.add(taskType);
-            btn.classList.add('qs-done');
-            Toast.success(`${btn.querySelector('.qs-label').textContent} logged! ✅`);
-          } catch (err) { Toast.error('Failed: ' + err.message); }
+          // Select new
+          btn.classList.add('qs-selected');
+          btn.classList.remove('qs-done');  // allow re-logging if desired
+          this.selectedCareAction = taskType;
+          this.careFullness = null;
+
+          const action = Chemistry.poolCareActions.find(a => a.type === taskType);
+          document.getElementById('careExtra').innerHTML = this._renderCareExtra(action);
+          this._bindCareExtra();
+          document.getElementById('logEntry').disabled  = false;
+          document.getElementById('logAndAdd').disabled = false;
         }
       });
     });
 
-    document.getElementById('submitCareNote')?.addEventListener('click', async () => {
-      const text = document.getElementById('panelNoteText')?.value?.trim();
-      if (!text) { Toast.info('Enter a note first'); return; }
-      try {
-        await API.addNote(text, this.entryDate);
-        Toast.success('Note saved! 📝');
-        document.getElementById('panelNoteText').value = '';
-        this.panelNotes.care = '';
-      } catch (err) { Toast.error('Failed: ' + err.message); }
-    });
+    document.getElementById('logEntry')?.addEventListener('click', () => this._submitCareEntry(false));
+    document.getElementById('logAndAdd')?.addEventListener('click', () => this._submitCareEntry(true));
   },
 
   // ── NOTE PANEL ──────────────────────────────────────────────
