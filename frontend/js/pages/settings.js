@@ -10,7 +10,7 @@ const SettingsPage = {
         API.getSettings(),
         API.getChemicalInventory().catch(() => []),
         API.getChemicalProducts().catch(() => ({})),
-        API.getAiStatus().catch(() => ({ enabled: false, key_set: false, model: 'claude-opus-4-8' })),
+        API.getAiStatus().catch(() => ({ enabled: false, key_set: false, provider: 'claude', model: 'claude-opus-4-8' })),
       ]);
       this._inventory = inventory;
       this._products = products;
@@ -182,21 +182,51 @@ const SettingsPage = {
       </div>`;
   },
 
+  _aiModelOptions: {
+    claude: [
+      { value: 'claude-opus-4-8',            label: 'Opus 4.8 — Most capable' },
+      { value: 'claude-sonnet-4-6',           label: 'Sonnet 4.6 — Balanced' },
+      { value: 'claude-haiku-4-5-20251001',   label: 'Haiku 4.5 — Fast' },
+    ],
+    gemini: [
+      { value: 'gemini-2.5-pro',    label: 'Gemini 2.5 Pro — Most capable' },
+      { value: 'gemini-2.5-flash',  label: 'Gemini 2.5 Flash — Balanced' },
+      { value: 'gemini-2.0-flash',  label: 'Gemini 2.0 Flash — Fast' },
+    ],
+  },
+
+  _aiKeyPlaceholder(provider, keySet) {
+    if (keySet) return '•••••••••••••• (leave blank to keep)';
+    return provider === 'gemini' ? 'AIza...' : 'sk-ant-...';
+  },
+
   renderAiSection() {
     const ai = this._aiStatus || {};
     const enabled = !!ai.enabled;
     const keySet = !!ai.key_set;
+    const provider = ai.provider || 'claude';
     const model = ai.model || 'claude-opus-4-8';
     const keyHint = keySet
       ? (ai.key_source === 'env' ? '🔑 Using key from server environment' : '🔑 Key saved')
       : 'No key set yet';
-    const placeholder = keySet ? '•••••••••••••• (leave blank to keep)' : 'sk-ant-...';
+    const placeholder = this._aiKeyPlaceholder(provider, keySet);
+    const keyLabel = provider === 'gemini' ? 'Google AI API Key' : 'Anthropic API Key';
+
+    const providerOpts = [
+      { value: 'claude', label: '🤖 Claude (Anthropic)' },
+      { value: 'gemini', label: '✦ Gemini (Google)' },
+    ].map(o => `<option value="${o.value}"${o.value === provider ? ' selected' : ''}>${o.label}</option>`).join('');
+
+    const modelOpts = (this._aiModelOptions[provider] || [])
+      .map(o => `<option value="${o.value}"${o.value === model ? ' selected' : ''}>${o.label}</option>`)
+      .join('');
+
     return `
       <div class="settings-group">
         <div class="section-title">✨ AI Insights</div>
         <div style="font-size:var(--fs-xs);color:var(--text-muted);margin-bottom:var(--space-md)">
-          Optional. Add a Claude API key for a plain-language daily briefing on Today
-          and tailored explanations of your treatment plans. All chemical recommendations
+          Optional. Connect Claude or Gemini for a plain-language daily briefing and
+          tailored explanations of your treatment plans. All chemical recommendations
           and amounts stay rule-based — AI only explains them, never invents doses.
         </div>
         <div class="card">
@@ -211,13 +241,17 @@ const SettingsPage = {
             </label>
           </div>
           <div class="form-group">
-            <label class="form-label">Claude API Key</label>
+            <label class="form-label">Provider</label>
+            <select class="form-select" id="aiProvider">${providerOpts}</select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Model</label>
+            <select class="form-select" id="aiModel">${modelOpts}</select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" id="aiKeyLabel">${keyLabel}</label>
             <input class="form-input" type="password" id="aiApiKey" placeholder="${placeholder}" autocomplete="off">
             <div style="font-size:var(--fs-xs);color:var(--text-muted);margin-top:4px" id="aiKeyHint">${keyHint}</div>
-          </div>
-          <div class="form-group" style="margin-bottom:var(--space-md)">
-            <label class="form-label">Model</label>
-            <input class="form-input" id="aiModel" value="${model}">
           </div>
           <div style="display:flex;gap:var(--space-sm)">
             <button class="btn btn-secondary" id="aiTestBtn" style="flex:1">Test connection</button>
@@ -234,10 +268,30 @@ const SettingsPage = {
       if (stateLabel) stateLabel.textContent = enabledCb.checked ? 'On' : 'Off';
     });
 
+    const providerSel = document.getElementById('aiProvider');
+    const modelSel = document.getElementById('aiModel');
+    const keyLabel = document.getElementById('aiKeyLabel');
+    const keyInput = document.getElementById('aiApiKey');
+
+    providerSel?.addEventListener('change', () => {
+      const p = providerSel.value;
+      const opts = (this._aiModelOptions[p] || [])
+        .map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+      if (modelSel) modelSel.innerHTML = opts;
+      if (keyLabel) keyLabel.textContent = p === 'gemini' ? 'Google AI API Key' : 'Anthropic API Key';
+      if (keyInput) {
+        keyInput.value = '';
+        keyInput.placeholder = this._aiKeyPlaceholder(p, false);
+      }
+      const hint = document.getElementById('aiKeyHint');
+      if (hint) hint.textContent = 'No key set yet';
+    });
+
     document.getElementById('aiTestBtn')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
-      const key = document.getElementById('aiApiKey')?.value?.trim() || null;
-      const model = document.getElementById('aiModel')?.value?.trim() || null;
+      const key = keyInput?.value?.trim() || null;
+      const model = modelSel?.value || null;
+      const provider = providerSel?.value || null;
       btn.disabled = true;
       const orig = btn.textContent;
       btn.textContent = '⏳ Testing...';
@@ -245,6 +299,7 @@ const SettingsPage = {
         const res = await API.testAiKey({
           ...(key ? { ai_api_key: key } : {}),
           ...(model ? { ai_model: model } : {}),
+          ...(provider ? { ai_provider: provider } : {}),
         });
         if (res.ok) Toast.success(res.message || 'Connection successful ✅');
         else Toast.error(res.message || 'Connection failed');
@@ -257,23 +312,24 @@ const SettingsPage = {
     });
 
     document.getElementById('aiSaveBtn')?.addEventListener('click', async () => {
-      const enabled = !!document.getElementById('aiEnabledCb')?.checked;
-      const key = document.getElementById('aiApiKey')?.value ?? '';
-      const model = document.getElementById('aiModel')?.value?.trim() || 'claude-opus-4-8';
+      const enabled = !!enabledCb?.checked;
+      const key = keyInput?.value ?? '';
+      const model = modelSel?.value || 'claude-opus-4-8';
+      const provider = providerSel?.value || 'claude';
       const keySet = !!(this._aiStatus && this._aiStatus.key_set);
 
       if (enabled && !keySet && !key.trim()) {
-        Toast.error('Enter a Claude API key first');
+        const providerName = provider === 'gemini' ? 'Google AI' : 'Anthropic';
+        Toast.error(`Enter a ${providerName} API key first`);
         return;
       }
-      const payload = { ai_enabled: enabled, ai_model: model };
+      const payload = { ai_enabled: enabled, ai_provider: provider, ai_model: model };
       if (key.trim()) payload.ai_api_key = key.trim();
       try {
         this._aiStatus = await API.updateAiSettings(payload);
-        const input = document.getElementById('aiApiKey');
-        if (input) {
-          input.value = '';
-          input.placeholder = this._aiStatus.key_set ? '•••••••••••••• (leave blank to keep)' : 'sk-ant-...';
+        if (keyInput) {
+          keyInput.value = '';
+          keyInput.placeholder = this._aiKeyPlaceholder(provider, this._aiStatus.key_set);
         }
         const hint = document.getElementById('aiKeyHint');
         if (hint) {

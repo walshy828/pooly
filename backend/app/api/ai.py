@@ -1,10 +1,10 @@
-"""Optional AI (Claude) insights API.
+"""Optional AI insights API (Claude and Gemini).
 
 All endpoints degrade safely when AI is disabled. The raw API key is never
 returned by any response.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ def _status_payload(pool: Optional[PoolConfig]) -> dict:
         "available": ai_insights.ai_available(pool),
         "key_set": bool(key),
         "key_source": "db" if has_db_key else ("env" if key else None),
+        "provider": ai_insights.provider_for(pool),
         "model": ai_insights.model_for(pool),
     }
 
@@ -45,6 +46,7 @@ async def ai_status(db: AsyncSession = Depends(get_db)):
 
 class AiSettingsUpdate(BaseModel):
     ai_enabled: Optional[bool] = None
+    ai_provider: Optional[Literal["claude", "gemini"]] = None
     ai_model: Optional[str] = None
     # Omit to keep the existing key; "" clears it; a value sets a new key.
     ai_api_key: Optional[str] = None
@@ -58,6 +60,8 @@ async def update_ai_settings(data: AiSettingsUpdate, db: AsyncSession = Depends(
 
     if data.ai_enabled is not None:
         pool.ai_enabled = data.ai_enabled
+    if data.ai_provider is not None:
+        pool.ai_provider = data.ai_provider
     if data.ai_model:
         pool.ai_model = data.ai_model
     if data.ai_api_key is not None:
@@ -70,6 +74,7 @@ async def update_ai_settings(data: AiSettingsUpdate, db: AsyncSession = Depends(
 
 class AiTestRequest(BaseModel):
     ai_api_key: Optional[str] = None
+    ai_provider: Optional[Literal["claude", "gemini"]] = None
     ai_model: Optional[str] = None
 
 
@@ -80,7 +85,8 @@ async def test_ai(data: AiTestRequest, db: AsyncSession = Depends(get_db)):
     if not key:
         return {"ok": False, "message": "No API key configured"}
     model = data.ai_model or ai_insights.model_for(pool)
-    ok, message = await ai_insights.test_key(key, model)
+    provider = data.ai_provider or ai_insights.provider_for(pool)
+    ok, message = await ai_insights.test_key(key, model, provider)
     return {"ok": ok, "message": message}
 
 

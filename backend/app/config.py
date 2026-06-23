@@ -49,9 +49,10 @@ class Settings(BaseSettings):
     # Timezone
     TZ: str = "America/New_York"
 
-    # Optional AI (Claude) insights — env fallback/override.
+    # Optional AI insights — env fallback/override for both providers.
     # The DB-stored key (set via Settings UI) takes precedence when present.
-    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_API_KEY: Optional[str] = None  # Claude
+    GOOGLE_API_KEY: Optional[str] = None     # Gemini
 
     @property
     def ha_enabled(self) -> bool:

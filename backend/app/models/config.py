@@ -27,10 +27,11 @@ class PoolConfig(Base):
     pool_status: Mapped[str] = mapped_column(String(20), default="open")  # open, closed
     pool_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pool_closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Optional AI (Claude) insights — off by default; key stored server-side, never returned verbatim
+    # Optional AI insights — off by default; key stored server-side, never returned verbatim
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     ai_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ai_model: Mapped[str] = mapped_column(String(60), default="claude-opus-4-8")
+    ai_provider: Mapped[str] = mapped_column(String(20), default="claude")  # claude | gemini
+    ai_model: Mapped[str] = mapped_column(String(80), default="claude-opus-4-8")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

@@ -1,4 +1,4 @@
-"""Optional Claude-powered insights layer.
+"""Optional AI insights layer supporting Claude (Anthropic) and Gemini (Google).
 
 This is *additive narration only*. The deterministic engines in
 ``services/chemistry.py`` and ``services/treatment_plan.py`` remain the source
@@ -18,7 +18,15 @@ import anthropic
 
 from app.config import settings as app_settings
 
-DEFAULT_MODEL = "claude-opus-4-8"
+try:
+    from google import genai as _google_genai
+    from google.genai import types as _google_types
+    _GEMINI_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _GEMINI_AVAILABLE = False
+
+DEFAULT_CLAUDE_MODEL = "claude-opus-4-8"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 
 BRIEFING_SYSTEM = (
     "You are Pooly's friendly, knowledgeable pool-care assistant. "
@@ -63,28 +71,62 @@ ENRICH_SCHEMA = {
     "additionalProperties": False,
 }
 
+# Gemini response_schema omits additionalProperties (not supported)
+ENRICH_SCHEMA_GEMINI = {
+    "type": "object",
+    "properties": {
+        "intro": {"type": "string"},
+        "steps": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "order": {"type": "integer"},
+                    "why": {"type": "string"},
+                },
+                "required": ["order", "why"],
+            },
+        },
+    },
+    "required": ["intro", "steps"],
+}
+
 
 # ── Config helpers ────────────────────────────────────────────────────────
 
+def provider_for(pool_cfg) -> str:
+    if pool_cfg is not None and getattr(pool_cfg, "ai_provider", None):
+        return pool_cfg.ai_provider
+    return "claude"
+
+
 def resolve_key(pool_cfg) -> Optional[str]:
-    """DB-stored key wins; fall back to the ANTHROPIC_API_KEY env var."""
+    """DB-stored key wins; fall back to the provider-specific env var."""
     if pool_cfg is not None and getattr(pool_cfg, "ai_api_key", None):
         return pool_cfg.ai_api_key
+    if provider_for(pool_cfg) == "gemini":
+        return app_settings.GOOGLE_API_KEY
     return app_settings.ANTHROPIC_API_KEY
 
 
 def model_for(pool_cfg) -> str:
     if pool_cfg is not None and getattr(pool_cfg, "ai_model", None):
         return pool_cfg.ai_model
-    return DEFAULT_MODEL
+    return DEFAULT_CLAUDE_MODEL
 
 
 def ai_available(pool_cfg) -> bool:
     return bool(pool_cfg is not None and pool_cfg.ai_enabled and resolve_key(pool_cfg))
 
 
-def _client(key: str) -> "anthropic.AsyncAnthropic":
+def _claude_client(key: str) -> "anthropic.AsyncAnthropic":
     return anthropic.AsyncAnthropic(api_key=key)
+
+
+def _gemini_client(key: str):
+    if not _GEMINI_AVAILABLE:
+        raise RuntimeError("google-genai package is not installed")
+    return _google_genai.Client(api_key=key)
 
 
 def _text(message) -> str:
@@ -93,10 +135,16 @@ def _text(message) -> str:
 
 # ── Connection test ───────────────────────────────────────────────────────
 
-async def test_key(key: str, model: str) -> tuple[bool, str]:
+async def test_key(key: str, model: str, provider: str = "claude") -> tuple[bool, str]:
     """Validate a key/model with a tiny call. Returns (ok, message)."""
+    if provider == "gemini":
+        return await _test_gemini_key(key, model)
+    return await _test_claude_key(key, model)
+
+
+async def _test_claude_key(key: str, model: str) -> tuple[bool, str]:
     try:
-        client = _client(key)
+        client = _claude_client(key)
         await client.messages.create(
             model=model,
             max_tokens=16,
@@ -107,10 +155,28 @@ async def test_key(key: str, model: str) -> tuple[bool, str]:
         return False, "Invalid API key"
     except anthropic.NotFoundError:
         return False, f"Model '{model}' not available for this key"
-    except anthropic.APIStatusError as e:  # pragma: no cover - network dependent
+    except anthropic.APIStatusError as e:  # pragma: no cover
         return False, f"API error ({e.status_code})"
-    except Exception as e:  # pragma: no cover - network dependent
+    except Exception as e:  # pragma: no cover
         return False, f"Connection failed: {e}"
+
+
+async def _test_gemini_key(key: str, model: str) -> tuple[bool, str]:
+    try:
+        client = _gemini_client(key)
+        await client.aio.models.generate_content(
+            model=model,
+            contents="Reply with the single word: ok",
+            config=_google_types.GenerateContentConfig(max_output_tokens=16),
+        )
+        return True, "Connection successful"
+    except Exception as e:
+        msg = str(e).lower()
+        if "api key" in msg or "permission" in msg or "403" in msg or "401" in msg:
+            return False, "Invalid API key"
+        if "not found" in msg or "404" in msg:
+            return False, f"Model '{model}' not found"
+        return False, f"Connection failed: {e}"  # pragma: no cover
 
 
 # ── Daily briefing ────────────────────────────────────────────────────────
@@ -173,27 +239,48 @@ async def generate_briefing(pool_cfg, dashboard: dict) -> Optional[str]:
     if not key:
         return None
     context = _summarize_dashboard(dashboard).strip() or "No pool data has been logged yet."
+    user_msg = (
+        "Here is the current state of my pool:\n\n"
+        f"{context}\n\n"
+        "Write today's briefing."
+    )
+    if provider_for(pool_cfg) == "gemini":
+        return await _gemini_briefing(key, model_for(pool_cfg), user_msg)
+    return await _claude_briefing(key, model_for(pool_cfg), user_msg)
+
+
+async def _claude_briefing(key: str, model: str, user_msg: str) -> Optional[str]:
     try:
-        client = _client(key)
+        client = _claude_client(key)
         async with client.messages.stream(
-            model=model_for(pool_cfg),
+            model=model,
             max_tokens=500,
             system=BRIEFING_SYSTEM,
             thinking={"type": "adaptive"},
             output_config={"effort": "low"},
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Here is the current state of my pool:\n\n"
-                    f"{context}\n\n"
-                    "Write today's briefing."
-                ),
-            }],
+            messages=[{"role": "user", "content": user_msg}],
         ) as stream:
             message = await stream.get_final_message()
         return _text(message) or None
-    except Exception as e:  # pragma: no cover - network dependent
-        print(f"[AI] briefing failed: {e}")
+    except Exception as e:  # pragma: no cover
+        print(f"[AI] Claude briefing failed: {e}")
+        return None
+
+
+async def _gemini_briefing(key: str, model: str, user_msg: str) -> Optional[str]:
+    try:
+        client = _gemini_client(key)
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=user_msg,
+            config=_google_types.GenerateContentConfig(
+                system_instruction=BRIEFING_SYSTEM,
+                max_output_tokens=500,
+            ),
+        )
+        return (response.text or "").strip() or None
+    except Exception as e:  # pragma: no cover
+        print(f"[AI] Gemini briefing failed: {e}")
         return None
 
 
@@ -222,10 +309,17 @@ async def enrich_plan(pool_cfg, plan: dict) -> Optional[dict]:
     key = resolve_key(pool_cfg)
     if not key:
         return None
+    user_msg = f"Explain this treatment plan to me:\n\n{_summarize_plan(plan)}"
+    if provider_for(pool_cfg) == "gemini":
+        return await _gemini_enrich(key, model_for(pool_cfg), user_msg)
+    return await _claude_enrich(key, model_for(pool_cfg), user_msg)
+
+
+async def _claude_enrich(key: str, model: str, user_msg: str) -> Optional[dict]:
     try:
-        client = _client(key)
+        client = _claude_client(key)
         message = await client.messages.create(
-            model=model_for(pool_cfg),
+            model=model,
             max_tokens=2000,
             system=ENRICH_SYSTEM,
             thinking={"type": "adaptive"},
@@ -233,13 +327,7 @@ async def enrich_plan(pool_cfg, plan: dict) -> Optional[dict]:
                 "effort": "medium",
                 "format": {"type": "json_schema", "schema": ENRICH_SCHEMA},
             },
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Explain this treatment plan to me:\n\n"
-                    f"{_summarize_plan(plan)}"
-                ),
-            }],
+            messages=[{"role": "user", "content": user_msg}],
         )
         data = json.loads(_text(message))
         step_why = {
@@ -248,6 +336,31 @@ async def enrich_plan(pool_cfg, plan: dict) -> Optional[dict]:
             if "order" in s and "why" in s
         }
         return {"intro": data.get("intro", ""), "step_why": step_why}
-    except Exception as e:  # pragma: no cover - network dependent
-        print(f"[AI] plan enrichment failed: {e}")
+    except Exception as e:  # pragma: no cover
+        print(f"[AI] Claude plan enrichment failed: {e}")
+        return None
+
+
+async def _gemini_enrich(key: str, model: str, user_msg: str) -> Optional[dict]:
+    try:
+        client = _gemini_client(key)
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=user_msg,
+            config=_google_types.GenerateContentConfig(
+                system_instruction=ENRICH_SYSTEM,
+                max_output_tokens=2000,
+                response_mime_type="application/json",
+                response_schema=ENRICH_SCHEMA_GEMINI,
+            ),
+        )
+        data = json.loads(response.text)
+        step_why = {
+            int(s["order"]): s["why"]
+            for s in data.get("steps", [])
+            if "order" in s and "why" in s
+        }
+        return {"intro": data.get("intro", ""), "step_why": step_why}
+    except Exception as e:  # pragma: no cover
+        print(f"[AI] Gemini plan enrichment failed: {e}")
         return None
