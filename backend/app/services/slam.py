@@ -159,7 +159,13 @@ def _slam_complete_step(order: int) -> dict:
 
 # ─── MAIN ENGINE ──────────────────────────────────────────────────────────────
 
-def initial_slam_steps(measurements: dict, algae_level: str | None) -> tuple[list[dict], dict]:
+def initial_slam_steps(
+    measurements: dict,
+    algae_level: str | None,
+    pool_gal: float = 10000.0,
+    inventory: list[dict] | None = None,
+    water_clarity: int | None = None,
+) -> tuple[list[dict], dict]:
     """Build the first step(s) for a brand-new SLAM plan. Returns (steps, slam_state)."""
     cya = measurements.get("cyanuric_acid")
     state = _new_slam_state(cya)
@@ -169,7 +175,19 @@ def initial_slam_steps(measurements: dict, algae_level: str | None) -> tuple[lis
         steps.append(_cya_test_step(2))
         return steps, state
 
-    return steps, state
+    # CYA is already known — queue the first shock/retest step immediately instead
+    # of leaving the plan stalled on just the brush step until a manual re-evaluation.
+    result = evaluate_slam(
+        plan_slam_state=state,
+        measurements=measurements,
+        water_clarity=water_clarity,
+        algae_level=algae_level,
+        pool_gal=pool_gal,
+        inventory=inventory or [],
+        next_order=2,
+    )
+    steps.extend(result["steps"])
+    return steps, result["slam_state"]
 
 
 def evaluate_slam(

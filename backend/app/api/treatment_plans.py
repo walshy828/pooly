@@ -156,7 +156,12 @@ async def generate_treatment_plan(
     slam_state = None
 
     if use_slam:
-        slam_steps, slam_state = slam_service.initial_slam_steps(measurements, algae_level)
+        slam_steps, slam_state = slam_service.initial_slam_steps(
+            measurements, algae_level,
+            pool_gal=float(pool_config_dict["volume_gallons"]),
+            inventory=inventory,
+            water_clarity=water_clarity,
+        )
         plan_data["steps"] = slam_steps
         plan_data["plan_type"] = "algae_slam"
         plan_data["estimated_days"] = plan_data["estimated_days"] or 5
@@ -286,8 +291,19 @@ async def complete_step(
     )
     plan = plan_result.scalar_one()
     if all(s.is_completed for s in plan.steps):
-        plan.status = "completed"
-        plan.completed_at = datetime.now(timezone.utc)
+        if plan.method == "slam":
+            # SLAM plans are retest-driven — finishing every known step just means we've
+            # caught up to the last measurement, not that treatment is done. Re-run the
+            # engine against the latest test so there's always a next step to show,
+            # instead of closing out the plan out from under the user.
+            meas_result = await db.execute(
+                select(Measurement).order_by(desc(Measurement.measured_at)).limit(1)
+            )
+            latest_meas = meas_result.scalar_one_or_none()
+            await reevaluate_slam_plan(db, plan, latest_meas)
+        else:
+            plan.status = "completed"
+            plan.completed_at = datetime.now(timezone.utc)
 
     await db.commit()
     await db.refresh(step)

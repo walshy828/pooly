@@ -282,6 +282,16 @@ const TreatmentPlanPage = {
     const isCurrent   = !isCompleted && isUnlocked && !allSteps.slice(0, idx).some(s => !s.is_completed);
     const isLast      = idx === allSteps.length - 1;
 
+    // A step can be "unlocked" (visible, next in line) but still time-gated by the
+    // previous step's wait_hours_after — show it now with its scheduled time rather
+    // than hiding it or letting it be completed early.
+    const prevStep = idx > 0 ? allSteps[idx - 1] : null;
+    let availableAt = null;
+    if (isCurrent && prevStep?.wait_hours_after && prevStep?.completed_at) {
+      const t = new Date(prevStep.completed_at).getTime() + prevStep.wait_hours_after * 3600 * 1000;
+      if (t > Date.now()) availableAt = new Date(t);
+    }
+
     let numBg, numColor, numContent;
     if (isCompleted) {
       numBg = '#30D158'; numColor = '#000';
@@ -299,9 +309,16 @@ const TreatmentPlanPage = {
 
     const statePill = isCompleted
       ? `<span style="background:#30D15820;color:#30D158;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">Done</span>`
+      : availableAt
+      ? `<span style="background:#FF9F0A20;color:#FF9F0A;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">⏱ Scheduled</span>`
       : isCurrent
       ? `<span style="background:#00C8D420;color:#00C8D4;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px">▶ Up Next</span>`
       : `<span style="font-size:10px;font-weight:500;color:rgba(245,245,247,0.25);padding:2px 8px">Waiting</span>`;
+
+    const scheduledHtml = availableAt
+      ? `<div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(255,159,10,0.08);border:1px solid rgba(255,159,10,0.2);font-size:12px;color:#FF9F0A">
+          ⏱ Available at ${availableAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+        </div>` : '';
 
     const amountHtml = step.product_name && step.amount
       ? `<div style="margin:8px 0;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06)">
@@ -339,7 +356,7 @@ const TreatmentPlanPage = {
 
     const isOclt = step.action_type === 'oclt_evening' || step.action_type === 'oclt_morning';
 
-    const actionBtn = !isCompleted && isUnlocked && !isOclt
+    const actionBtn = !isCompleted && isUnlocked && !isOclt && !availableAt
       ? `<button class="btn btn-primary tp-complete-btn" data-step-id="${step.id}" data-plan-id="${step.plan_id}"
           style="margin-top:12px;width:100%;height:44px;border-radius:12px;font-size:14px;font-weight:600">
           Mark Complete ✓
@@ -378,6 +395,7 @@ const TreatmentPlanPage = {
           ${step.description ? `<div style="font-size:13px;color:rgba(245,245,247,0.55);line-height:1.5;margin-bottom:4px">${step.description}</div>` : ''}
           ${weatherHtml}
           ${amountHtml}
+          ${scheduledHtml}
           ${waitHtml}
           ${safetyHtml}
           ${whyHtml}
