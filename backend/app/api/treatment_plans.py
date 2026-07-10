@@ -6,13 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 from app.database import get_db
-from app.models import PoolConfig, Measurement, PoolObservation, ChemicalInventoryItem
+from app.models import PoolConfig, Measurement, PoolObservation, ChemicalInventoryItem, JournalEntry
 from app.models.treatment_plan import TreatmentPlan, TreatmentStep
 from app.models.sensor import WeatherSnapshot
 from app.schemas.treatment_plan import (
-    TreatmentPlanResponse, GeneratePlanRequest, CompleteStepRequest
+    TreatmentPlanResponse, GeneratePlanRequest, CompleteStepRequest,
+    OcltEveningRequest, OcltMorningRequest,
 )
 from app.services.treatment_plan import generate_plan, annotate_with_weather
+from app.services import slam as slam_service
 from app.services.weather import parse_daily_forecast
 
 router = APIRouter(prefix="/api/treatment-plans", tags=["treatment-plans"])
@@ -67,9 +69,11 @@ def _plan_to_response(plan: TreatmentPlan, daily_forecast: list = []) -> dict:
         "pool_config_id": plan.pool_config_id,
         "plan_type": plan.plan_type,
         "status": plan.status,
+        "method": plan.method,
         "condition_label": plan.condition_label,
         "estimated_days": plan.estimated_days,
         "measurement_snapshot": plan.measurement_snapshot,
+        "slam_state": plan.slam_state,
         "pool_gallons": plan.pool_gallons,
         "notes": plan.notes,
         "created_at": plan.created_at,
@@ -137,7 +141,7 @@ async def generate_treatment_plan(
         for i in inv_result.scalars().all()
     ]
 
-    # Generate plan
+    # Generate plan (also classifies condition, used to decide fixed vs. SLAM below)
     plan_data = generate_plan(
         measurements=measurements,
         pool_config=pool_config_dict,
@@ -146,6 +150,16 @@ async def generate_treatment_plan(
         health_score=health_score,
         inventory=inventory,
     )
+
+    condition = plan_data["condition"]
+    use_slam = data.method == "slam" and condition in ("algae_moderate", "algae_severe")
+    slam_state = None
+
+    if use_slam:
+        slam_steps, slam_state = slam_service.initial_slam_steps(measurements, algae_level)
+        plan_data["steps"] = slam_steps
+        plan_data["plan_type"] = "algae_slam"
+        plan_data["estimated_days"] = plan_data["estimated_days"] or 5
 
     # Mark any existing active plans for this pool as cancelled
     existing_active = await db.execute(
@@ -166,9 +180,11 @@ async def generate_treatment_plan(
         pool_config_id=pool_config.id,
         plan_type=plan_data["plan_type"],
         status="active",
+        method="slam" if use_slam else "fixed",
         condition_label=plan_data["condition_label"],
         estimated_days=plan_data["estimated_days"],
         measurement_snapshot=snapshot,
+        slam_state=slam_state,
         pool_gallons=plan_data["pool_gallons"],
         notes=data.notes,
     )
@@ -295,3 +311,199 @@ async def cancel_plan(plan_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
     daily_forecast = await _fetch_daily_forecast(db)
     return _plan_to_response(plan, daily_forecast)
+
+
+# ─── SLAM ──────────────────────────────────────────────────────────────────
+
+def _measurements_dict(latest_meas: Measurement | None) -> dict:
+    measurements: dict = {}
+    if latest_meas:
+        for param in CHEMISTRY_PARAMS:
+            val = getattr(latest_meas, param, None)
+            if val is not None:
+                measurements[param] = val
+    return measurements
+
+
+async def _load_active_slam_plan(db: AsyncSession, plan_id: int) -> TreatmentPlan:
+    result = await db.execute(
+        select(TreatmentPlan)
+        .where(TreatmentPlan.id == plan_id)
+        .options(selectinload(TreatmentPlan.steps))
+    )
+    plan = result.scalar_one_or_none()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Treatment plan not found")
+    if plan.method != "slam":
+        raise HTTPException(status_code=400, detail="This plan is not a SLAM plan")
+    if plan.status != "active":
+        raise HTTPException(status_code=400, detail="This plan is not active")
+    return plan
+
+
+def _append_steps(plan: TreatmentPlan, step_dicts: list[dict]) -> None:
+    next_order = (max((s.step_order for s in plan.steps), default=0)) + 1
+    for i, step_data in enumerate(step_dicts):
+        step = TreatmentStep(
+            plan_id=plan.id,
+            step_order=next_order + i,
+            title=step_data["title"],
+            description=step_data.get("description"),
+            action_type=step_data["action_type"],
+            product_id=step_data.get("product_id"),
+            product_name=step_data.get("product_name"),
+            amount=step_data.get("amount"),
+            unit=step_data.get("unit"),
+            bags_needed=step_data.get("bags_needed"),
+            wait_hours_after=step_data.get("wait_hours_after"),
+            why=step_data.get("why"),
+            safety_notes=step_data.get("safety_notes"),
+            alternative_products=step_data.get("alternative_products"),
+        )
+        plan.steps.append(step)
+
+
+async def reevaluate_slam_plan(db: AsyncSession, plan: TreatmentPlan, latest_meas: Measurement | None) -> None:
+    """Shared SLAM re-evaluation logic — called from the /slam/reevaluate endpoint and from
+    POST /api/measurements whenever a new test is logged while a SLAM plan is active."""
+    pool_result = await db.execute(select(PoolConfig).where(PoolConfig.id == plan.pool_config_id))
+    pool_config = pool_result.scalar_one_or_none()
+    pool_gal = float(pool_config.volume_gallons or 10000) if pool_config else 10000.0
+
+    inv_result = await db.execute(
+        select(ChemicalInventoryItem).where(ChemicalInventoryItem.pool_config_id == plan.pool_config_id)
+    )
+    inventory = [
+        {"product_id": i.product_id, "quantity": i.quantity, "unit": i.unit}
+        for i in inv_result.scalars().all()
+    ]
+
+    measurements = _measurements_dict(latest_meas)
+    water_clarity = latest_meas.water_clarity if latest_meas else None
+    algae_level = latest_meas.algae_level if latest_meas else None
+
+    next_order = (max((s.step_order for s in plan.steps), default=0)) + 1
+    result = slam_service.evaluate_slam(
+        plan_slam_state=plan.slam_state or {},
+        measurements=measurements,
+        water_clarity=water_clarity,
+        algae_level=algae_level,
+        pool_gal=pool_gal,
+        inventory=inventory,
+        next_order=next_order,
+    )
+    plan.slam_state = result["slam_state"]
+    _append_steps(plan, result["steps"])
+    if result["plan_completed"]:
+        plan.status = "completed"
+        plan.completed_at = datetime.now(timezone.utc)
+
+
+@router.post("/{plan_id}/slam/reevaluate")
+async def reevaluate_slam(plan_id: int, db: AsyncSession = Depends(get_db)):
+    """Recompute the next SLAM step(s) from the latest water test."""
+    plan = await _load_active_slam_plan(db, plan_id)
+
+    meas_result = await db.execute(
+        select(Measurement).order_by(desc(Measurement.measured_at)).limit(1)
+    )
+    latest_meas = meas_result.scalar_one_or_none()
+
+    await reevaluate_slam_plan(db, plan, latest_meas)
+    await db.commit()
+
+    reload_result = await db.execute(
+        select(TreatmentPlan).where(TreatmentPlan.id == plan.id).options(selectinload(TreatmentPlan.steps))
+    )
+    plan = reload_result.scalar_one()
+    daily_forecast = await _fetch_daily_forecast(db)
+    return _plan_to_response(plan, daily_forecast)
+
+
+@router.post("/{plan_id}/slam/oclt/evening")
+async def log_oclt_evening(plan_id: int, data: OcltEveningRequest, db: AsyncSession = Depends(get_db)):
+    """Log the evening FC reading that starts the Overnight Chlorine Loss Test."""
+    plan = await _load_active_slam_plan(db, plan_id)
+
+    now = datetime.now(timezone.utc)
+    entry = JournalEntry(entry_type="measurement", entry_date=now, notes="SLAM OCLT — evening reading")
+    db.add(entry)
+    await db.flush()
+    meas = Measurement(
+        journal_entry_id=entry.id,
+        measured_at=now,
+        free_chlorine=data.free_chlorine,
+        treatment_plan_id=plan.id,
+    )
+    db.add(meas)
+    await db.flush()
+
+    next_order = (max((s.step_order for s in plan.steps), default=0)) + 1
+    result = slam_service.start_oclt_evening(plan.slam_state or {}, data.free_chlorine, next_order)
+    plan.slam_state = result["slam_state"]
+    _append_steps(plan, result["steps"])
+
+    await db.commit()
+
+    reload_result = await db.execute(
+        select(TreatmentPlan).where(TreatmentPlan.id == plan.id).options(selectinload(TreatmentPlan.steps))
+    )
+    plan = reload_result.scalar_one()
+    daily_forecast = await _fetch_daily_forecast(db)
+    return _plan_to_response(plan, daily_forecast)
+
+
+@router.post("/{plan_id}/slam/oclt/morning")
+async def log_oclt_morning(plan_id: int, data: OcltMorningRequest, db: AsyncSession = Depends(get_db)):
+    """Log the morning FC reading, score the OCLT, and advance the plan accordingly."""
+    plan = await _load_active_slam_plan(db, plan_id)
+
+    oclt_state = (plan.slam_state or {}).get("oclt") or {}
+    if oclt_state.get("status") != "evening_logged":
+        raise HTTPException(status_code=400, detail="No evening OCLT reading has been logged yet")
+
+    now = datetime.now(timezone.utc)
+    entry = JournalEntry(entry_type="measurement", entry_date=now, notes="SLAM OCLT — morning reading")
+    db.add(entry)
+    await db.flush()
+    meas = Measurement(
+        journal_entry_id=entry.id,
+        measured_at=now,
+        free_chlorine=data.free_chlorine,
+        treatment_plan_id=plan.id,
+    )
+    db.add(meas)
+    await db.flush()
+
+    # Latest full water test (for CC / clarity / algae) — falls back to the pool's latest measurement
+    meas_result = await db.execute(
+        select(Measurement)
+        .where(Measurement.treatment_plan_id == plan.id)
+        .order_by(desc(Measurement.measured_at))
+    )
+    recent = meas_result.scalars().all()
+    latest_full = next((m for m in recent if m.total_chlorine is not None), None)
+    cc = max(0, (latest_full.total_chlorine - latest_full.free_chlorine)) if latest_full else 0.0
+    water_clarity = latest_full.water_clarity if latest_full else None
+    algae_level = latest_full.algae_level if latest_full else None
+
+    next_order = (max((s.step_order for s in plan.steps), default=0)) + 1
+    result = slam_service.complete_oclt_morning(
+        plan.slam_state or {}, data.free_chlorine, cc, water_clarity, algae_level, next_order
+    )
+    plan.slam_state = result["slam_state"]
+    _append_steps(plan, result["steps"])
+    if result["plan_completed"]:
+        plan.status = "completed"
+        plan.completed_at = now
+
+    await db.commit()
+
+    reload_result = await db.execute(
+        select(TreatmentPlan).where(TreatmentPlan.id == plan.id).options(selectinload(TreatmentPlan.steps))
+    )
+    plan = reload_result.scalar_one()
+    daily_forecast = await _fetch_daily_forecast(db)
+    response = _plan_to_response(plan, daily_forecast)
+    response["oclt_result"] = {"passed": result["passed"], "loss": result["loss"]}
+    return response

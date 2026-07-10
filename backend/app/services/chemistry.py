@@ -1,89 +1,115 @@
 """Pool chemistry range definitions, color maps, and recommendation engine.
 
-Ranges and colors are based on standard 7-way test strips (the image provided by the user).
+Ranges/zones mirror frontend/js/utils/chemistry.js — keep both in sync.
 """
 
 from typing import Optional
 
 # ── Range Definitions ────────────────────────────────────────────────────────
-# Each tuple: (low_limit, ideal_low, ideal_high, high_limit, unit)
+# min/max/step drive slider mechanics; zones are named color bands for the
+# "at a glance" visual and are independent of step granularity. ideal_low/
+# ideal_high remain the authoritative thresholds for low/ideal/high status.
 CHEMISTRY_RANGES = {
     "ph": {
         "label": "pH",
         "unit": "",
-        "low": 7.2,
+        "min": 6.5, "max": 8.8, "step": 0.1, "decimals": 1,
         "ideal_low": 7.2,
         "ideal_high": 7.6,
-        "high": 7.8,
-        "options": [6.2, 6.8, 7.2, 7.8, 8.4],
-        "colors": ["#E8832A", "#D4C738", "#5B9B3E", "#3A7B4F", "#5B4B8A"],
-        "color_labels": ["Acidic", "Low", "Ideal", "High", "Very High"],
+        "zones": [
+            {"up_to": 6.9, "color": "#E8832A", "label": "Acidic"},
+            {"up_to": 7.1, "color": "#D4C738", "label": "Low"},
+            {"up_to": 7.6, "color": "#5B9B3E", "label": "Ideal"},
+            {"up_to": 7.9, "color": "#3A7B4F", "label": "High"},
+            {"up_to": None, "color": "#5B4B8A", "label": "Very High"},
+        ],
     },
     "free_chlorine": {
         "label": "Free Chlorine",
         "unit": "ppm",
-        "low": 1.0,
+        "min": 0, "max": 50, "step": 0.2, "decimals": 1,
         "ideal_low": 1.0,
         "ideal_high": 4.0,
-        "high": 5.0,
-        "options": [0, 0.5, 1, 3, 5, 10],
-        "colors": ["#F5EBB0", "#F0D4C8", "#E8A0B4", "#D46B94", "#B83878", "#8B1A5C"],
-        "color_labels": ["None", "Very Low", "Low", "Ideal", "High", "Very High"],
+        "zones": [
+            {"up_to": 0.5, "color": "#F5EBB0", "label": "Very Low"},
+            {"up_to": 1.0, "color": "#F0D4C8", "label": "Low"},
+            {"up_to": 4.0, "color": "#E8A0B4", "label": "Ideal"},
+            {"up_to": 10.0, "color": "#D46B94", "label": "High"},
+            {"up_to": 40.0, "color": "#B83878", "label": "Shock Level"},
+            {"up_to": None, "color": "#8B1A5C", "label": "Very High"},
+        ],
     },
     "total_chlorine": {
         "label": "Total Chlorine",
         "unit": "ppm",
-        "low": 1.0,
+        "min": 0, "max": 50, "step": 0.2, "decimals": 1,
         "ideal_low": 1.0,
         "ideal_high": 4.0,
-        "high": 5.0,
-        "options": [0, 0.5, 1, 3, 5, 10],
-        "colors": ["#F5EBB0", "#F0D4C8", "#E8A0B4", "#D46B94", "#B83878", "#8B1A5C"],
-        "color_labels": ["None", "Very Low", "Low", "Ideal", "High", "Very High"],
+        "zones": [
+            {"up_to": 0.5, "color": "#F5EBB0", "label": "Very Low"},
+            {"up_to": 1.0, "color": "#F0D4C8", "label": "Low"},
+            {"up_to": 4.0, "color": "#E8A0B4", "label": "Ideal"},
+            {"up_to": 10.0, "color": "#D46B94", "label": "High"},
+            {"up_to": 40.0, "color": "#B83878", "label": "Shock Level"},
+            {"up_to": None, "color": "#8B1A5C", "label": "Very High"},
+        ],
     },
     "alkalinity": {
         "label": "Alkalinity",
         "unit": "ppm",
-        "low": 80,
+        "min": 0, "max": 300, "step": 10, "decimals": 0,
         "ideal_low": 80,
         "ideal_high": 120,
-        "high": 180,
-        "options": [0, 40, 80, 120, 180, 240],
-        "colors": ["#D4B83D", "#A8B545", "#5C9E44", "#3B8C4A", "#2A7B7B", "#1A6B8A"],
-        "color_labels": ["None", "Low", "Ideal Low", "Ideal", "High", "Very High"],
+        "zones": [
+            {"up_to": 40, "color": "#D4B83D", "label": "Low"},
+            {"up_to": 80, "color": "#A8B545", "label": "Ideal Low"},
+            {"up_to": 120, "color": "#5C9E44", "label": "Ideal"},
+            {"up_to": 180, "color": "#3B8C4A", "label": "High"},
+            {"up_to": 240, "color": "#2A7B7B", "label": "Very High"},
+            {"up_to": None, "color": "#1A6B8A", "label": "Excessive"},
+        ],
     },
     "cyanuric_acid": {
         "label": "Cyanuric Acid",
         "unit": "ppm",
-        "low": 30,
+        "min": 0, "max": 300, "step": 5, "decimals": 0,
         "ideal_low": 30,
         "ideal_high": 50,
-        "high": 100,
-        "options": [0, 30, 50, 100, 150, 240],
-        "colors": ["#F0D0D8", "#E0A0B8", "#C87098", "#A84878", "#8B2858", "#6B1040"],
-        "color_labels": ["None", "Low-Ideal", "Ideal", "High", "Very High", "Excessive"],
+        "zones": [
+            {"up_to": 30, "color": "#F0D0D8", "label": "Low"},
+            {"up_to": 50, "color": "#E0A0B8", "label": "Ideal"},
+            {"up_to": 100, "color": "#C87098", "label": "High"},
+            {"up_to": 150, "color": "#A84878", "label": "Very High"},
+            {"up_to": None, "color": "#6B1040", "label": "Excessive"},
+        ],
     },
     "calcium_hardness": {
         "label": "Hardness",
         "unit": "ppm",
-        "low": 200,
+        "min": 0, "max": 1000, "step": 25, "decimals": 0,
         "ideal_low": 200,
         "ideal_high": 400,
-        "high": 500,
-        "options": [0, 100, 200, 400, 800],
-        "colors": ["#D86060", "#C04888", "#8848A8", "#5858C0", "#3868D0"],
-        "color_labels": ["Very Soft", "Soft", "Ideal Low", "Ideal", "Hard"],
+        "zones": [
+            {"up_to": 100, "color": "#D86060", "label": "Very Soft"},
+            {"up_to": 200, "color": "#C04888", "label": "Soft"},
+            {"up_to": 400, "color": "#8848A8", "label": "Ideal"},
+            {"up_to": 800, "color": "#5858C0", "label": "Hard"},
+            {"up_to": None, "color": "#3868D0", "label": "Very Hard"},
+        ],
     },
     "bromine": {
         "label": "Bromine",
         "unit": "ppm",
-        "low": 2.0,
+        "min": 0, "max": 20, "step": 0.2, "decimals": 1,
         "ideal_low": 2.0,
         "ideal_high": 6.0,
-        "high": 10.0,
-        "options": [0, 1, 2, 4, 6, 10],
-        "colors": ["#F5EBB0", "#F0D4C8", "#E8A0B4", "#D46B94", "#B83878", "#8B1A5C"],
-        "color_labels": ["None", "Very Low", "Low", "Ideal", "High", "Very High"],
+        "zones": [
+            {"up_to": 1.0, "color": "#F5EBB0", "label": "Low"},
+            {"up_to": 2.0, "color": "#F0D4C8", "label": "Low-Ideal"},
+            {"up_to": 6.0, "color": "#E8A0B4", "label": "Ideal"},
+            {"up_to": 10.0, "color": "#D46B94", "label": "High"},
+            {"up_to": None, "color": "#8B1A5C", "label": "Very High"},
+        ],
     },
 }
 
@@ -98,19 +124,11 @@ def get_chemistry_status(parameter: str, value: Optional[float]) -> dict:
 
     spec = CHEMISTRY_RANGES[parameter]
 
-    # Find the closest option for the color
-    options = spec["options"]
-    colors = spec["colors"]
-    closest_idx = 0
-    min_diff = abs(value - options[0])
-    for i, opt in enumerate(options):
-        diff = abs(value - opt)
-        if diff < min_diff:
-            min_diff = diff
-            closest_idx = i
-
-    color = colors[closest_idx]
-    color_label = spec["color_labels"][closest_idx]
+    zone = spec["zones"][-1]
+    for z in spec["zones"]:
+        if z["up_to"] is None or value <= z["up_to"]:
+            zone = z
+            break
 
     if value < spec["ideal_low"]:
         status = "low"
@@ -121,8 +139,8 @@ def get_chemistry_status(parameter: str, value: Optional[float]) -> dict:
 
     return {
         "status": status,
-        "color": color,
-        "label": color_label,
+        "color": zone["color"],
+        "label": zone["label"],
     }
 
 

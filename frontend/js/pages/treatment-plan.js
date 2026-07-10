@@ -82,6 +82,34 @@ const TreatmentPlanPage = {
           </div>
         </div>
 
+        <div id="genMethodPicker" style="display:none;margin-top:12px">
+          <div class="bento-card">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(245,245,247,0.4);margin-bottom:14px">
+              How would you like to tackle it?
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="method-btn active" data-method="fixed"
+                style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:14px;
+                  border:1.5px solid #00C8D4;background:#00C8D418;cursor:pointer;text-align:left;transition:all 0.15s">
+                <span style="font-size:1.4rem">📋</span>
+                <div style="flex:1">
+                  <div style="font-size:14px;font-weight:600;color:#00C8D4">Fixed Plan</div>
+                  <div style="font-size:11px;color:rgba(245,245,247,0.45);margin-top:1px">A proven step-by-step guide with preset timing</div>
+                </div>
+              </button>
+              <button class="method-btn" data-method="slam"
+                style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:14px;
+                  border:1.5px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.03);cursor:pointer;text-align:left;transition:all 0.15s">
+                <span style="font-size:1.4rem">🔁</span>
+                <div style="flex:1">
+                  <div style="font-size:14px;font-weight:600;color:#F5F5F7">SLAM Method</div>
+                  <div style="font-size:11px;color:rgba(245,245,247,0.45);margin-top:1px">Retest-driven recovery (Shock, Level, and Maintain) — adjusts as you test. Typically 3-7 days.</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <button class="btn btn-primary" id="generatePlanBtn"
           style="width:100%;margin-top:16px;height:52px;font-size:15px;font-weight:600;border-radius:16px">
           Generate Treatment Plan
@@ -91,11 +119,25 @@ const TreatmentPlanPage = {
 
   bindGenerate(container) {
     let selectedAlgae = 'none';
+    let selectedMethod = 'fixed';
     const levels = [
       { id: 'none', color: '#30D158' }, { id: 'slight', color: '#FFD60A' },
       { id: 'moderate', color: '#FF9F0A' }, { id: 'heavy', color: '#FF453A' },
       { id: 'swamp', color: '#A3E635' },
     ];
+
+    const methodPicker = document.getElementById('genMethodPicker');
+
+    const updateMethodButtons = () => {
+      document.querySelectorAll('#genMethodPicker .method-btn').forEach(b => {
+        const isActive = b.dataset.method === selectedMethod;
+        const col = b.dataset.method === 'slam' ? '#FF9F0A' : '#00C8D4';
+        b.style.borderColor = isActive ? col : 'rgba(255,255,255,0.07)';
+        b.style.background = isActive ? col + '18' : 'rgba(255,255,255,0.03)';
+        const nameEl = b.querySelector('div div:first-child');
+        if (nameEl) nameEl.style.color = isActive ? col : '#F5F5F7';
+      });
+    };
 
     document.querySelectorAll('#genAlgaePicker .algae-level-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -117,6 +159,20 @@ const TreatmentPlanPage = {
               : '';
           }
         });
+
+        const showMethodChoice = selectedAlgae === 'heavy' || selectedAlgae === 'swamp';
+        if (methodPicker) methodPicker.style.display = showMethodChoice ? 'block' : 'none';
+        if (!showMethodChoice) {
+          selectedMethod = 'fixed';
+          updateMethodButtons();
+        }
+      });
+    });
+
+    document.querySelectorAll('#genMethodPicker .method-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedMethod = btn.dataset.method;
+        updateMethodButtons();
       });
     });
 
@@ -129,7 +185,7 @@ const TreatmentPlanPage = {
         btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px"><span class="spinner" style="width:16px;height:16px;border-width:2px"></span>Generating plan…</span>`;
       }
       try {
-        const plan = await API.generateTreatmentPlan({ algae_level: selectedAlgae });
+        const plan = await API.generateTreatmentPlan({ algae_level: selectedAlgae, method: selectedMethod });
         this._plan = plan;
         container.innerHTML = this.buildPlanHTML(plan);
         this.bindPlan();
@@ -153,6 +209,7 @@ const TreatmentPlanPage = {
       maintenance: '#30D158', minor_correction: '#0A84FF',
       significant_correction: '#FF9F0A', chemistry_correction: '#FF9F0A',
       algae_mild: '#FFD60A', algae_moderate: '#FF9F0A', algae_severe: '#FF453A',
+      algae_slam: '#FF9F0A',
     };
     const headerColor = typeColors[plan.plan_type] || '#0A84FF';
     const isComplete  = plan.status === 'completed';
@@ -192,6 +249,9 @@ const TreatmentPlanPage = {
           </div>` : ''}
         </div>
 
+        <!-- SLAM status -->
+        ${plan.method === 'slam' ? this._buildSlamStatusCard(plan) : ''}
+
         <!-- AI Explain block -->
         ${this._aiStatus?.enabled ? `
         <div class="bento-card stagger-2" style="margin-top:12px" id="tpAiBlock">
@@ -214,6 +274,7 @@ const TreatmentPlanPage = {
   buildStepHTML(step, idx, allSteps) {
     const actionIcons = {
       add_chemical: '⚗️', mechanical: '🔧', wait: '⏳', test: '🧪', run_pump: '🔄',
+      oclt_evening: '🌙', oclt_morning: '🌅',
     };
 
     const isCompleted = step.is_completed;
@@ -276,12 +337,14 @@ const TreatmentPlanPage = {
           ${step.alternative_products.map(a => `<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(245,245,247,0.5);border:1px solid rgba(255,255,255,0.08)">${a.name}</span>`).join('')}
         </div>` : '';
 
-    const actionBtn = !isCompleted && isUnlocked
+    const isOclt = step.action_type === 'oclt_evening' || step.action_type === 'oclt_morning';
+
+    const actionBtn = !isCompleted && isUnlocked && !isOclt
       ? `<button class="btn btn-primary tp-complete-btn" data-step-id="${step.id}" data-plan-id="${step.plan_id}"
           style="margin-top:12px;width:100%;height:44px;border-radius:12px;font-size:14px;font-weight:600">
           Mark Complete ✓
         </button>`
-      : isCompleted
+      : isCompleted && !isOclt
       ? `<button class="btn btn-secondary tp-undo-btn" data-step-id="${step.id}" data-plan-id="${step.plan_id}"
           style="margin-top:10px;font-size:12px;height:32px;border-radius:10px">
           Undo
@@ -289,6 +352,8 @@ const TreatmentPlanPage = {
 
     const testLinkBtn = step.action_type === 'test'
       ? `<a href="#quick-entry/test" class="btn btn-secondary" style="margin-top:10px;text-decoration:none;display:block;text-align:center;font-size:13px;height:36px;line-height:36px;border-radius:12px">Log Water Test →</a>` : '';
+
+    const ocltHtml = isOclt && isUnlocked ? this.buildOcltStepHTML(step) : '';
 
     return `
       <div id="step-${step.id}" style="display:flex;gap:12px;margin-bottom:${isLast ? 0 : 4}px;padding:0 0 ${isLast ? 0 : 8}px">
@@ -320,7 +385,27 @@ const TreatmentPlanPage = {
           ${altHtml}
           ${step.user_notes ? `<div style="margin-top:8px;font-size:12px;color:rgba(245,245,247,0.4)">📝 ${step.user_notes}</div>` : ''}
           ${testLinkBtn}
+          ${ocltHtml}
           ${actionBtn}
+        </div>
+      </div>`;
+  },
+
+  buildOcltStepHTML(step) {
+    const isEvening = step.action_type === 'oclt_evening';
+    const label = isEvening ? 'Evening FC Reading' : 'Morning FC Reading';
+    const btnLabel = isEvening ? 'Log Evening Reading' : 'Log Morning Reading';
+    const inputId = isEvening ? 'oclt-evening-fc' : 'oclt-morning-fc';
+    return `
+      <div style="margin-top:10px;padding:12px;border-radius:12px;background:rgba(255,159,10,0.06);border:1px solid rgba(255,159,10,0.18)">
+        <label style="font-size:11px;color:rgba(245,245,247,0.5);display:block;margin-bottom:6px">${label} (ppm)</label>
+        <div style="display:flex;gap:8px">
+          <input type="number" step="0.1" min="0" id="${inputId}" placeholder="e.g. 12.0"
+            style="flex:1;height:40px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#F5F5F7;padding:0 12px;font-size:14px">
+          <button class="btn btn-primary tp-oclt-btn" data-plan-id="${step.plan_id}" data-stage="${isEvening ? 'evening' : 'morning'}" data-input-id="${inputId}"
+            style="height:40px;padding:0 16px;border-radius:10px;font-size:13px;font-weight:600;white-space:nowrap">
+            ${btnLabel}
+          </button>
         </div>
       </div>`;
   },
@@ -404,6 +489,89 @@ const TreatmentPlanPage = {
         } catch (err) { Toast.error('Failed to undo: ' + err.message); }
       });
     });
+
+    document.querySelectorAll('.tp-oclt-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const planId = parseInt(btn.dataset.planId);
+        const stage = btn.dataset.stage;
+        const input = document.getElementById(btn.dataset.inputId);
+        const fc = parseFloat(input?.value);
+        if (isNaN(fc)) { Toast.error('Enter a valid FC reading'); return; }
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px"></span>`;
+        try {
+          const updatedPlan = stage === 'evening'
+            ? await API.logOcltEvening(planId, { free_chlorine: fc })
+            : await API.logOcltMorning(planId, { free_chlorine: fc });
+          this._plan = updatedPlan;
+          const content = document.getElementById('pageContent');
+          if (content) { content.innerHTML = this.buildPlanHTML(updatedPlan); this.bindPlan(); }
+          if (stage === 'morning' && updatedPlan.oclt_result) {
+            updatedPlan.oclt_result.passed
+              ? Toast.success(`OCLT passed! Loss: ${updatedPlan.oclt_result.loss} ppm`)
+              : Toast.error(`OCLT failed — loss was ${updatedPlan.oclt_result.loss} ppm. Resuming shock loop.`);
+          } else {
+            Toast.success('Reading logged ✅');
+          }
+        } catch (err) {
+          Toast.error('Failed to log reading: ' + err.message);
+          btn.disabled = false;
+          btn.textContent = stage === 'evening' ? 'Log Evening Reading' : 'Log Morning Reading';
+        }
+      });
+    });
+
+    document.getElementById('tpRefreshSlamBtn')?.addEventListener('click', async () => {
+      if (!this._plan) return;
+      const btn = document.getElementById('tpRefreshSlamBtn');
+      if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:2px"></span>`; }
+      try {
+        const updatedPlan = await API.reevaluateSlamPlan(this._plan.id);
+        this._plan = updatedPlan;
+        const content = document.getElementById('pageContent');
+        if (content) { content.innerHTML = this.buildPlanHTML(updatedPlan); this.bindPlan(); }
+      } catch (err) {
+        Toast.error('Failed to refresh: ' + err.message);
+        if (btn) { btn.disabled = false; btn.innerHTML = '🔄 Check Latest Test'; }
+      }
+    });
+  },
+
+  // ── SLAM Status ────────────────────────────────────────────
+
+  _buildSlamStatusCard(plan) {
+    const s = plan.slam_state || {};
+    const oclt = s.oclt || { status: 'not_started' };
+    const phaseLabels = {
+      awaiting_cya: 'Waiting on CYA test',
+      dosing_loop: 'Shocking & retesting',
+      awaiting_oclt: 'Ready for overnight test',
+      complete: 'Complete',
+    };
+    const ocltPill = {
+      not_started: { label: 'Not started', color: 'rgba(245,245,247,0.4)' },
+      evening_logged: { label: 'Awaiting morning reading', color: '#0A84FF' },
+      passed: { label: 'Passed ✅', color: '#30D158' },
+      failed: { label: 'Failed — resuming', color: '#FF453A' },
+    }[oclt.status] || { label: 'Not started', color: 'rgba(245,245,247,0.4)' };
+
+    return `
+      <div class="bento-card stagger-2" style="margin-top:12px;padding:14px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:rgba(245,245,247,0.35)">SLAM Status</div>
+          <button id="tpRefreshSlamBtn" style="font-size:11px;color:#00C8D4;background:none;border:none;cursor:pointer;padding:2px 4px">🔄 Check Latest Test</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px 18px;margin-bottom:8px">
+          <div><div style="font-size:10px;color:rgba(245,245,247,0.35)">Day</div><div style="font-size:15px;font-weight:700;color:#F5F5F7">${s.day_count ?? 1}</div></div>
+          <div><div style="font-size:10px;color:rgba(245,245,247,0.35)">Doses</div><div style="font-size:15px;font-weight:700;color:#F5F5F7">${s.dose_count ?? 0}</div></div>
+          <div><div style="font-size:10px;color:rgba(245,245,247,0.35)">Target FC</div><div style="font-size:15px;font-weight:700;color:#F5F5F7">${s.target_fc != null ? s.target_fc + ' ppm' : '—'}</div></div>
+          <div><div style="font-size:10px;color:rgba(245,245,247,0.35)">CYA</div><div style="font-size:15px;font-weight:700;color:#F5F5F7">${s.cya != null ? s.cya + ' ppm' : 'Unknown'}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06)">
+          <span style="font-size:12px;color:rgba(245,245,247,0.55)">${phaseLabels[s.phase] || 'In progress'}</span>
+          <span style="font-size:11px;font-weight:600;color:${ocltPill.color}">OCLT: ${ocltPill.label}</span>
+        </div>
+      </div>`;
   },
 
   // ── Weather Strip ────────────────────────────────────────

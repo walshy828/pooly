@@ -87,15 +87,10 @@ const EditModal = {
       const spec = Chemistry.ranges[param];
       if (!spec) return;
       const selected = this.editValues[param];
-      const chips = spec.options.map((val, i) => {
-        const bg  = spec.colors[i];
-        const sel = selected === val ? ' selected' : '';
-        return `<button class="meas-chip${sel}" data-param="${param}" data-value="${val}" style="background:${bg}">${val}</button>`;
-      }).join('');
 
       let idealBar = '';
-      if (spec.idealLow && spec.idealHigh) {
-        const min = spec.options[0], max = spec.options[spec.options.length - 1];
+      if (spec.idealLow != null && spec.idealHigh != null) {
+        const min = spec.min, max = spec.max;
         const range = max - min;
         if (range > 0) {
           const leftPct  = ((spec.idealLow  - min) / range * 100).toFixed(1);
@@ -112,13 +107,10 @@ const EditModal = {
         }
       }
 
-      const selDisplay = selected != null ? `Selected: ${selected}${spec.unit ? ' ' + spec.unit : ''}` : '';
       html += `
         <div class="measurement-group">
-          <div class="measurement-label">${spec.label} <span class="measurement-unit">${spec.unit}</span></div>
-          <div class="measurement-chips">${chips}</div>
+          ${MeasurementSlider.render(param, selected ?? null, { idPrefix: 'edit-' })}
           ${idealBar}
-          <div class="selected-value-display" id="edit-sel-${param}">${selDisplay}</div>
         </div>`;
     });
 
@@ -132,21 +124,12 @@ const EditModal = {
   },
 
   bindMeasurementEdit(entry) {
-    document.querySelectorAll('#editModalOverlay .meas-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        const param = chip.dataset.param;
-        const val   = parseFloat(chip.dataset.value);
-        if (this.editValues[param] === val) delete this.editValues[param];
-        else this.editValues[param] = val;
-
-        document.querySelectorAll(`#editModalOverlay .meas-chip[data-param="${param}"]`).forEach(c => c.classList.remove('selected'));
-        if (this.editValues[param] != null) chip.classList.add('selected');
-
-        const spec = Chemistry.ranges[param];
-        const el   = document.getElementById(`edit-sel-${param}`);
-        if (el) el.textContent = this.editValues[param] != null
-          ? `Selected: ${this.editValues[param]}${spec.unit ? ' ' + spec.unit : ''}` : '';
-      });
+    document.querySelectorAll('#editModalOverlay .meas-slider-input').forEach(slider => {
+      const param = slider.dataset.param;
+      MeasurementSlider.bindSlider(param, (val) => {
+        if (val != null) this.editValues[param] = val;
+        else delete this.editValues[param];
+      }, 'edit-');
     });
 
     const slider = document.getElementById('editHealthSlider');

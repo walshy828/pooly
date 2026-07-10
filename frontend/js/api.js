@@ -81,6 +81,9 @@ const API = {
   getTreatmentPlan(planId) { return this._fetch(`/treatment-plans/${planId}`); },
   completeStep(planId, stepId, data) { return this._fetch(`/treatment-plans/${planId}/steps/${stepId}`, { method: 'PATCH', body: data }); },
   cancelPlan(planId) { return this._fetch(`/treatment-plans/${planId}/cancel`, { method: 'POST' }); },
+  reevaluateSlamPlan(planId) { return this._fetch(`/treatment-plans/${planId}/slam/reevaluate`, { method: 'POST' }); },
+  logOcltEvening(planId, data) { return this._fetch(`/treatment-plans/${planId}/slam/oclt/evening`, { method: 'POST', body: data }); },
+  logOcltMorning(planId, data) { return this._fetch(`/treatment-plans/${planId}/slam/oclt/morning`, { method: 'POST', body: data }); },
 
   // Chemical Inventory
   getChemicalInventory() { return this._fetch('/chemical-inventory'); },

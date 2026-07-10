@@ -4,9 +4,30 @@ from datetime import datetime
 from typing import Optional, Literal, Any
 from pydantic import BaseModel
 
-PlanTypeStr = Literal["chemistry_correction", "algae_mild", "algae_moderate", "algae_severe", "maintenance"]
+PlanTypeStr = Literal[
+    "chemistry_correction", "algae_mild", "algae_moderate", "algae_severe", "algae_slam", "maintenance"
+]
 PlanStatusStr = Literal["active", "completed", "cancelled"]
-ActionTypeStr = Literal["add_chemical", "mechanical", "wait", "test", "run_pump"]
+PlanMethodStr = Literal["fixed", "slam"]
+ActionTypeStr = Literal["add_chemical", "mechanical", "wait", "test", "run_pump", "oclt_evening", "oclt_morning"]
+
+
+class SlamOcltState(BaseModel):
+    status: Literal["not_started", "evening_logged", "passed", "failed"] = "not_started"
+    evening_fc: Optional[float] = None
+    evening_logged_at: Optional[datetime] = None
+    morning_fc: Optional[float] = None
+    loss: Optional[float] = None
+
+
+class SlamStateResponse(BaseModel):
+    cya: Optional[float] = None
+    target_fc: Optional[float] = None
+    day_count: int = 1
+    dose_count: int = 0
+    last_dose_at: Optional[datetime] = None
+    phase: Literal["awaiting_cya", "dosing_loop", "awaiting_oclt", "complete"] = "awaiting_cya"
+    oclt: SlamOcltState = SlamOcltState()
 
 
 class TreatmentStepResponse(BaseModel):
@@ -38,9 +59,11 @@ class TreatmentPlanResponse(BaseModel):
     pool_config_id: int
     plan_type: PlanTypeStr
     status: PlanStatusStr
+    method: PlanMethodStr = "fixed"
     condition_label: str
     estimated_days: Optional[int] = None
     measurement_snapshot: Optional[dict] = None
+    slam_state: Optional[SlamStateResponse] = None
     pool_gallons: Optional[int] = None
     notes: Optional[str] = None
     created_at: datetime
@@ -55,7 +78,16 @@ class TreatmentPlanResponse(BaseModel):
 
 class GeneratePlanRequest(BaseModel):
     algae_level: Optional[Literal["none", "slight", "moderate", "heavy", "swamp"]] = None
+    method: PlanMethodStr = "fixed"
     notes: Optional[str] = None
+
+
+class OcltEveningRequest(BaseModel):
+    free_chlorine: float
+
+
+class OcltMorningRequest(BaseModel):
+    free_chlorine: float
 
 
 class CompleteStepRequest(BaseModel):

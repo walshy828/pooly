@@ -56,6 +56,9 @@ class Measurement(Base):
     water_clarity: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-10 scale
     algae_level: Mapped[str | None] = mapped_column(String(20), nullable=True, default="none")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    treatment_plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("treatment_plans.id", ondelete="SET NULL"), nullable=True
+    )
 
     journal_entry: Mapped["JournalEntry"] = relationship(back_populates="measurements")
 

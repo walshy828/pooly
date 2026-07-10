@@ -35,6 +35,7 @@ class MeasurementResponse(BaseModel):
     water_clarity: Optional[int] = None
     algae_level: AlgaeLevelType = None
     notes: Optional[str] = None
+    treatment_plan_id: Optional[int] = None
 
     class Config:
         from_attributes = True

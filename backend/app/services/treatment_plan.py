@@ -82,6 +82,36 @@ def _fmt_amount(amount: float, unit: str) -> str:
     return f"{amount:.1f} {unit}"
 
 
+def calc_dose_to_target(
+    pool_gal: float,
+    current_fc: float,
+    target_fc: float,
+    product: dict,
+) -> dict:
+    """Return shock dosage dict needed to raise FC from current_fc to target_fc."""
+    ppm_raise = max(0, target_fc - current_fc)
+    if ppm_raise <= 0:
+        ppm_raise = 10.0  # at minimum, raise by 10 ppm for maintenance
+
+    ppm_per_unit = product.get("ppm_per_unit_per_10k", 10.0)
+    pkg_unit = product.get("package_unit", "lbs")
+    pkg_size = product.get("package_size", 1)
+    volume_factor = pool_gal / 10000
+
+    raw_amount = (ppm_raise / ppm_per_unit) * volume_factor
+    rounded = _round_up_half(raw_amount)
+    bags = math.ceil(rounded / pkg_size)
+
+    return {
+        "amount": rounded,
+        "unit": pkg_unit,
+        "bags_needed": bags,
+        "target_fc": target_fc,
+        "ppm_raise": ppm_raise,
+        "description": f"{rounded} {pkg_unit} of {product['name']} (raises FC by ~{ppm_raise:.0f} ppm)",
+    }
+
+
 def calc_shock(
     pool_gal: float,
     current_fc: float,
@@ -106,27 +136,7 @@ def calc_shock(
         breakpoint_target = combined_cl * 10
         target_fc = max(target_fc, breakpoint_target)
 
-    ppm_raise = max(0, target_fc - current_fc)
-    if ppm_raise <= 0:
-        ppm_raise = 10.0  # at minimum, raise by 10 ppm for maintenance
-
-    ppm_per_unit = product.get("ppm_per_unit_per_10k", 10.0)
-    pkg_unit = product.get("package_unit", "lbs")
-    pkg_size = product.get("package_size", 1)
-    volume_factor = pool_gal / 10000
-
-    raw_amount = (ppm_raise / ppm_per_unit) * volume_factor
-    rounded = _round_up_half(raw_amount)
-    bags = math.ceil(rounded / pkg_size)
-
-    return {
-        "amount": rounded,
-        "unit": pkg_unit,
-        "bags_needed": bags,
-        "target_fc": target_fc,
-        "ppm_raise": ppm_raise,
-        "description": f"{rounded} {pkg_unit} of {product['name']} (raises FC by ~{ppm_raise:.0f} ppm)",
-    }
+    return calc_dose_to_target(pool_gal, current_fc, target_fc, product)
 
 
 def calc_ph_adjustment(pool_gal: float, current_ph: float, target_ph: float, product: dict) -> dict:

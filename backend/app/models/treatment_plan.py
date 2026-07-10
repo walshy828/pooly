@@ -12,6 +12,7 @@ class PlanType(str, enum.Enum):
     algae_mild = "algae_mild"
     algae_moderate = "algae_moderate"
     algae_severe = "algae_severe"
+    algae_slam = "algae_slam"
     maintenance = "maintenance"
 
 
@@ -27,6 +28,8 @@ class ActionType(str, enum.Enum):
     wait = "wait"
     test = "test"
     run_pump = "run_pump"
+    oclt_evening = "oclt_evening"
+    oclt_morning = "oclt_morning"
 
 
 class TreatmentPlan(Base):
@@ -36,9 +39,11 @@ class TreatmentPlan(Base):
     pool_config_id: Mapped[int] = mapped_column(ForeignKey("pool_config.id", ondelete="CASCADE"))
     plan_type: Mapped[str] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(20), default="active")
+    method: Mapped[str] = mapped_column(String(20), default="fixed")
     condition_label: Mapped[str] = mapped_column(String(100))
     estimated_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     measurement_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    slam_state: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     pool_gallons: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

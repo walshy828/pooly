@@ -177,7 +177,7 @@ const QuickEntryPage = {
 
   // ── TEST PANEL ────────────────────────────────────────────────
   renderTestPanel() {
-    const params = ['free_chlorine','total_chlorine','bromine','ph','alkalinity','cyanuric_acid'];
+    const params = ['free_chlorine','total_chlorine','bromine','ph','alkalinity','cyanuric_acid','calcium_hardness'];
     let paramHtml = params.map(p => this.renderMeasurementSlider(p)).join('');
     return `
       ${this.renderPendingReminderBanner()}
@@ -234,101 +234,10 @@ const QuickEntryPage = {
   },
 
   renderMeasurementSlider(param) {
-    const spec = Chemistry.ranges[param];
-    if (!spec) return '';
-    const N = spec.options.length;
     const currentVal = this.measurementValues[param];
     const lastVal    = this.lastMeasurements[param];
     const initVal    = currentVal ?? lastVal ?? null;
-    const initIdx    = initVal != null ? this._valueToSliderIdx(param, initVal) : -1;
-    const isNotTested= initIdx < 0;
-    const badgeColor = isNotTested ? null : spec.colors[initIdx];
-    const badgeLabel = isNotTested ? 'Not Tested' : spec.colorLabels[initIdx];
-    const unitStr    = spec.unit ? ` ${spec.unit}` : '';
-    const badgeNum   = isNotTested ? '—' : `${spec.options[initIdx]}${unitStr}`;
-    const gradient   = this._buildTrackGradient(spec);
-    const lastText   = lastVal != null ? `Last: ${lastVal}${unitStr}` : '';
-    const idealText  = spec.idealLow != null ? `Ideal ${spec.idealLow}–${spec.idealHigh}${unitStr}` : '';
-
-    const borderColor = badgeColor || 'rgba(255,255,255,0.07)';
-    const bgColor     = badgeColor ? this._hexToRgba(badgeColor, 0.1) : 'rgba(255,255,255,0.03)';
-    const numColor    = badgeColor || 'rgba(245,245,247,0.35)';
-
-    return `
-      <div class="bento-card bento-card-sm" data-param="${param}">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-[13px] font-semibold text-pool-text">${spec.label}${spec.unit ? `<span class="text-[11px] text-pool-muted ml-1">(${spec.unit})</span>` : ''}</span>
-          <div class="flex items-center gap-2">
-            ${lastText ? `<span class="text-[11px] text-pool-muted">${lastText}</span>` : ''}
-            <div class="rounded-xl px-3 py-1 text-center" id="badge-${param}"
-              style="border:1px solid ${borderColor};background:${bgColor};min-width:80px">
-              <span class="text-[16px] font-bold block" id="valnum-${param}" style="color:${numColor}">${badgeNum}</span>
-              <span class="text-[10px] font-medium block" id="vallbl-${param}" style="color:${numColor}">${badgeLabel}</span>
-            </div>
-          </div>
-        </div>
-        <div style="position:relative">
-          <div style="position:absolute;inset:0;border-radius:3px;pointer-events:none;background:${gradient}"></div>
-          <input type="range" class="meas-slider-input" id="slider-${param}"
-            data-param="${param}" min="-1" max="${N-1}" step="1" value="${initIdx}"
-            style="--thumb-color:${badgeColor||'#555'};position:relative;z-index:1;background:transparent">
-        </div>
-        ${idealText ? `<div class="text-[11px] text-pool-muted mt-1.5">✓ ${idealText}</div>` : ''}
-      </div>`;
-  },
-
-  _abbrevLabel(lbl) {
-    return lbl.replace('Very Low','V.Low').replace('Very High','V.High').replace('Very Soft','V.Soft')
-              .replace('Ideal Low','Idl-Lo').replace('Ideal High','Idl-Hi')
-              .replace('Low-Ideal','Lo-Idl').replace('Excessive','Excess');
-  },
-
-  _buildTrackGradient(spec) {
-    const N = spec.options.length;
-    const slotPct = 100 / (N + 1);
-    const stops = [`#1a1a2e 0%`, `#222 ${slotPct.toFixed(2)}%`];
-    spec.colors.forEach((color, i) => {
-      const s = ((i + 1) * slotPct).toFixed(2);
-      const e = ((i + 2) * slotPct).toFixed(2);
-      stops.push(`${color} ${s}%`, `${color} ${e}%`);
-    });
-    return `linear-gradient(90deg, ${stops.join(', ')})`;
-  },
-
-  _valueToSliderIdx(param, val) {
-    const opts = Chemistry.ranges[param].options;
-    let best = 0, bestDiff = Math.abs(val - opts[0]);
-    opts.forEach((o,i) => { const d = Math.abs(val - o); if (d < bestDiff) { bestDiff = d; best = i; } });
-    return best;
-  },
-
-  _hexToRgba(hex, alpha) {
-    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-    return `rgba(${r},${g},${b},${alpha})`;
-  },
-
-  _updateSliderBadge(param, idx) {
-    const spec  = Chemistry.ranges[param];
-    const badge = document.getElementById(`badge-${param}`);
-    const numEl = document.getElementById(`valnum-${param}`);
-    const lblEl = document.getElementById(`vallbl-${param}`);
-    const slEl  = document.getElementById(`slider-${param}`);
-    if (!badge || !numEl || !lblEl) return;
-    const unitStr = spec.unit ? ` ${spec.unit}` : '';
-    if (idx < 0) {
-      badge.style.borderColor = 'rgba(255,255,255,0.07)';
-      badge.style.background  = 'rgba(255,255,255,0.03)';
-      numEl.textContent = '—'; numEl.style.color = 'rgba(245,245,247,0.35)';
-      lblEl.textContent = 'Not Tested'; lblEl.style.color = 'rgba(245,245,247,0.35)';
-      if (slEl) slEl.style.setProperty('--thumb-color','#555');
-    } else {
-      const val = spec.options[idx], color = spec.colors[idx], label = spec.colorLabels[idx];
-      badge.style.borderColor = color;
-      badge.style.background  = this._hexToRgba(color, 0.1);
-      numEl.textContent = `${val}${unitStr}`; numEl.style.color = color;
-      lblEl.textContent = label;             lblEl.style.color = color;
-      if (slEl) slEl.style.setProperty('--thumb-color', color);
-    }
+    return MeasurementSlider.render(param, initVal, { lastValue: lastVal });
   },
 
   bindTestPanel() {
@@ -337,13 +246,11 @@ const QuickEntryPage = {
     document.querySelectorAll('.meas-slider-input').forEach(slider => {
       const param = slider.dataset.param;
       const spec  = Chemistry.ranges[param];
-      const idx   = parseInt(slider.value);
-      if (idx >= 0) this.measurementValues[param] = spec.options[idx];
-      slider.addEventListener('input', () => {
-        const i = parseInt(slider.value);
-        if (i >= 0) this.measurementValues[param] = spec.options[i];
+      const raw   = parseFloat(slider.value);
+      if (raw >= spec.min) this.measurementValues[param] = parseFloat(raw.toFixed(spec.decimals ?? 1));
+      MeasurementSlider.bindSlider(param, (val) => {
+        if (val != null) this.measurementValues[param] = val;
         else delete this.measurementValues[param];
-        this._updateSliderBadge(param, i);
       });
     });
     const healthSlider = document.getElementById('healthSlider');
