@@ -815,3 +815,57 @@ textarea { resize: vertical; min-height: 80px; }
   border: 1px solid rgba(255,255,255,0.1); padding: 6px 10px; text-align: left;
 }
 .markdown-body th { color: #F5F5F7; background: rgba(255,255,255,0.05); font-weight: 600; }
+
+/* ── Settings: quick-access grid ─────────────────── */
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.quick-card {
+  background: rgba(15, 32, 64, 0.75);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 18px;
+  padding: 16px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  color: #F5F5F7;
+  transition: background 0.15s ease;
+}
+.quick-card:active { background: rgba(255,255,255,0.06); }
+.quick-card-icon { font-size: 1.5rem; }
+.quick-card-label { font-size: 12px; font-weight: 500; text-align: center; }
+
+/* ── Settings: collapsible configuration sections ── */
+.config-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(15,32,64,0.6);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 20px;
+  padding: 14px 16px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  color: #F5F5F7;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.config-toggle.open { margin-bottom: 10px; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
+.config-body { margin: -6px 0 16px; }
+.config-body.hidden { display: none; }
+.config-chevron {
+  color: rgba(245,245,247,0.3);
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+.config-toggle.open .config-chevron { transform: rotate(90deg); }
