@@ -63,6 +63,17 @@ const SettingsPage = {
 
         ${this.renderCatalogSection()}
 
+        <div class="section-label">Reference</div>
+        <div class="settings-section">
+          <button id="openGuideBtn" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 16px;background:none;border:none;cursor:pointer;text-align:left">
+            <div>
+              <div style="font-size:15px;color:#F5F5F7">📖 Pool Care Guide</div>
+              <div style="font-size:12px;color:rgba(245,245,247,0.4);margin-top:2px">Chemical cheat-sheet &amp; how-to guides</div>
+            </div>
+            <div style="color:rgba(245,245,247,0.3);font-size:18px">›</div>
+          </button>
+        </div>
+
         ${this.renderAiSection()}
 
         <div class="section-label">Pool Care Schedules</div>
@@ -631,6 +642,8 @@ const SettingsPage = {
         window.location.reload();
       } catch (err) { Toast.error('Failed to close: ' + err.message); }
     });
+
+    document.getElementById('openGuideBtn')?.addEventListener('click', () => App.navigate('guide'));
 
     document.getElementById('savePool')?.addEventListener('click', async () => {
       try {

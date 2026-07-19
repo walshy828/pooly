@@ -56,6 +56,7 @@ from app.api.treatment_plans import router as treatment_plans_router
 from app.api.chemical_inventory import router as chemical_inventory_router
 from app.api.custom_products import router as custom_products_router
 from app.api.ai import router as ai_router
+from app.api.guide import router as guide_router
 
 app.include_router(dashboard_router)
 app.include_router(journal_router)
@@ -69,6 +70,7 @@ app.include_router(treatment_plans_router)
 app.include_router(chemical_inventory_router)
 app.include_router(custom_products_router)
 app.include_router(ai_router)
+app.include_router(guide_router)
 
 
 @app.get("/api/health")

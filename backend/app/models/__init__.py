@@ -13,6 +13,7 @@ from app.models.journal import (
 from app.models.sensor import SensorReading, WeatherSnapshot
 from app.models.config import PoolConfig, MaintenanceSchedule, ChemicalInventoryItem, UserProductCatalog
 from app.models.treatment_plan import TreatmentPlan, TreatmentStep, PlanType, PlanStatus, ActionType
+from app.models.guide import GuideChemical, GuideArticle
 
 __all__ = [
     "Base",
@@ -34,4 +35,6 @@ __all__ = [
     "PlanType",
     "PlanStatus",
     "ActionType",
+    "GuideChemical",
+    "GuideArticle",
 ]

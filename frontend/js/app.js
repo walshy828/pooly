@@ -132,7 +132,7 @@ const App = {
     if (!this.authenticated && page !== 'pin') return;
     const { tab = null, skipHash = false } = options;
 
-    const validPages = ['dashboard', 'quick-entry', 'history', 'settings', 'treatment-plan'];
+    const validPages = ['dashboard', 'quick-entry', 'history', 'settings', 'treatment-plan', 'guide'];
     const targetPage = validPages.includes(page) ? page : 'dashboard';
 
     this.currentPage = targetPage;
@@ -162,6 +162,10 @@ const App = {
         break;
       case 'treatment-plan':
         await TreatmentPlanPage.render(this.contentEl);
+        break;
+      case 'guide':
+        if (tab) GuidePage.activeTab = tab;
+        await GuidePage.render(this.contentEl);
         break;
       default:
         await DashboardPage.render(this.contentEl);

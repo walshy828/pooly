@@ -99,6 +99,17 @@ const API = {
     return this._fetch(`/products/builtin/${productId}/enabled`, { method: 'PATCH', body: { enabled } });
   },
 
+  // Pool Care Guide (chemical cheat-sheet + articles)
+  getGuideChemicals() { return this._fetch('/guide/chemicals'); },
+  createGuideChemical(data) { return this._fetch('/guide/chemicals', { method: 'POST', body: data }); },
+  updateGuideChemical(id, data) { return this._fetch(`/guide/chemicals/${id}`, { method: 'PUT', body: data }); },
+  deleteGuideChemical(id) { return this._fetch(`/guide/chemicals/${id}`, { method: 'DELETE' }); },
+  getGuideArticles() { return this._fetch('/guide/articles'); },
+  getGuideArticle(id) { return this._fetch(`/guide/articles/${id}`); },
+  createGuideArticle(data) { return this._fetch('/guide/articles', { method: 'POST', body: data }); },
+  updateGuideArticle(id, data) { return this._fetch(`/guide/articles/${id}`, { method: 'PUT', body: data }); },
+  deleteGuideArticle(id) { return this._fetch(`/guide/articles/${id}`, { method: 'DELETE' }); },
+
   // AI Insights (optional Claude layer)
   getAiStatus() { return this._fetch('/ai/status'); },
   updateAiSettings(data) { return this._fetch('/ai/settings', { method: 'PUT', body: data }); },
