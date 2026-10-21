@@ -137,8 +137,11 @@ async def ha_status(db: AsyncSession = Depends(get_db)):
     )
     schedules = sched_result.scalars().all()
     counts = {"urgent": 0, "overdue": 0, "due_soon": 0, "good": 0}
-    for s in schedules:
-        counts[_task_state(s, now)["state"]] += 1
+    pool_closed = bool(pool_cfg and pool_cfg.pool_status == "closed")
+    # A closed pool has no maintenance due, so don't count tasks (HA automations key off these).
+    if not pool_closed:
+        for s in schedules:
+            counts[_task_state(s, now)["state"]] += 1
 
     temp_result = await db.execute(
         select(SensorReading)

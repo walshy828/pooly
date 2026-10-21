@@ -3,10 +3,10 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.database import async_session
-from app.models import SensorReading, WeatherSnapshot
+from app.models import PoolConfig, SensorReading, WeatherSnapshot
 from app.services.home_assistant import get_pool_temperature, get_pump_state, get_pump_energy, send_ha_notification
 from app.services.weather import fetch_weather
 from app.services.reminders import auto_update_schedules, compute_reminders, ensure_default_schedules
@@ -105,6 +105,10 @@ async def check_reminders():
     """Update schedules and send HA notifications for urgent items."""
     async with async_session() as db:
         await auto_update_schedules(db)
+        pool_cfg = (await db.execute(select(PoolConfig).limit(1))).scalar_one_or_none()
+        if pool_cfg and pool_cfg.pool_status == "closed":
+            print("[Worker] Pool is closed — skipping maintenance reminder notification")
+            return
         reminders = await compute_reminders(db)
 
     urgent = [r for r in reminders if r["urgency"] in ("urgent", "overdue")]
